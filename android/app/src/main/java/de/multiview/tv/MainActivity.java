@@ -21,6 +21,8 @@ import android.webkit.WebViewClient;
 public class MainActivity extends Activity {
     private WebView web;
     private boolean showingError = false;
+    private Updater updater;
+    private long lastUpdateCheck = 0;
 
     private static final String ERROR_PAGE =
         "<html><body style='background:#0e0e10;color:#efeff1;font:28px sans-serif;display:flex;"
@@ -65,6 +67,22 @@ public class MainActivity extends Activity {
         if (savedInstanceState != null) web.restoreState(savedInstanceState);
         else web.loadUrl(BuildConfig.START_URL);
         web.requestFocus();
+
+        updater = new Updater(this);
+        web.addJavascriptInterface(new Bridge(), "MultiViewApp");
+    }
+
+    /** Exposed to the website: window.MultiViewApp.checkUpdate() / .version() */
+    public class Bridge {
+        @android.webkit.JavascriptInterface
+        public void checkUpdate() {
+            runOnUiThread(() -> updater.check(true));
+        }
+
+        @android.webkit.JavascriptInterface
+        public int version() {
+            return BuildConfig.VERSION_CODE;
+        }
     }
 
     private void showError() {
@@ -136,6 +154,12 @@ public class MainActivity extends Activity {
         super.onResume();
         web.onResume();
         hideSystemUi();
+        // check for a new app version at most every 6 hours
+        long now = System.currentTimeMillis();
+        if (now - lastUpdateCheck > 6 * 3600 * 1000L) {
+            lastUpdateCheck = now;
+            updater.check(false);
+        }
     }
 
     @Override

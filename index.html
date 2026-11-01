@@ -28,7 +28,7 @@
     <h2>Deine Cams <span id="camCount" class="count"></span></h2>
     <ol id="list" class="list"></ol>
     <p id="empty" class="hint">Noch keine Cams. Oben einen Twitch-Link einfuegen.</p>
-    <p class="hint" id="listHint" hidden>Hauptbild = hat Ton und ist bei Spotlight / Bild in Bild gross. Andere Cams laufen stumm in niedriger Qualitaet.</p>
+    <p class="hint" id="listHint" hidden>Hauptbild = hat Ton und ist bei Spotlight / Bild in Bild gross. Andere Cams laufen stumm (Qualitaet unten einstellbar).</p>
 
     <section id="finder" hidden>
       <h2>Live-Streams finden</h2>
@@ -63,6 +63,27 @@
       <button class="nav" data-layout="pip">Bild in Bild</button>
       <button class="nav" data-layout="single">Nur einer</button>
     </div>
+
+    <h2>Qualitaet</h2>
+    <div class="qrow"><span class="qlabel">Hauptbild</span>
+      <div id="qMain" class="row">
+        <button class="nav" data-qmain="auto">Auto</button>
+        <button class="nav" data-qmain="1080">1080p</button>
+        <button class="nav" data-qmain="720">720p</button>
+        <button class="nav" data-qmain="480">480p</button>
+        <button class="nav" data-qmain="min">Minimal</button>
+      </div>
+    </div>
+    <div class="qrow"><span class="qlabel">Neben-Cams</span>
+      <div id="qSide" class="row">
+        <button class="nav" data-qside="min">Minimal</button>
+        <button class="nav" data-qside="360">360p</button>
+        <button class="nav" data-qside="480">480p</button>
+        <button class="nav" data-qside="720">720p</button>
+        <button class="nav" data-qside="auto">Auto</button>
+      </div>
+    </div>
+    <p class="hint">Weniger Qualitaet = weniger Leistung und Datenverbrauch. Fire TV: Neben-Cams auf Minimal lassen. Gibt der Stream die Stufe nicht her, wird die naechst kleinere genommen. Gilt nur fuer dieses Geraet.</p>
 
     <h2>Link fuer Fire TV / Freunde</h2>
     <div class="row">

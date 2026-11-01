@@ -8,7 +8,8 @@ Mehrere Twitch-Streams gleichzeitig ansehen: einen beliebigen Live-Stream als Ha
 
 - Cams per Twitch-Link oder Name hinzufuegen (max. 9): Link einfach ins Feld einfuegen, wird sofort uebernommen. Mehrere Links/Namen auf einmal moeglich, auch m.twitch.tv-, Popout- und Player-Links
 - Cam-Liste mit Nummer, Hauptbild-Markierung, Hoch/Runter und Entfernen (auch per Fernbedienung)
-- Spart Leistung: nur das Hauptbild laeuft in voller Qualitaet, Neben-Cams stumm in niedrigster Qualitaet, unsichtbare Streams werden pausiert
+- Qualitaet einstellbar, getrennt fuer Hauptbild (Auto, 1080p, 720p, 480p, Minimal) und Neben-Cams (Minimal bis Auto), gespeichert pro Geraet
+- Spart Leistung: Neben-Cams standardmaessig stumm in niedrigster Qualitaet, unsichtbare Streams werden pausiert
 - Live-Streams finden (nach Twitch-Anmeldung): gefolgte Kanaele, Top DE, Top weltweit, Suche
 - "Hauptbild" setzt einen Stream gross und mit Ton, "Als Cam dazu" fuegt ihn klein dazu
 - Layouts: Raster, Spotlight, Bild in Bild, Nur einer

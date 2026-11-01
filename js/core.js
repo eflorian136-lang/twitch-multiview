@@ -1,6 +1,10 @@
 // Pure logic: state <-> URL, channel validation, layouts, remote-control navigation.
 export const LAYOUTS = ['grid', 'spotlight', 'pip', 'single'];
 export const MAX_CHANNELS = 9;
+// Quality presets: 'auto' = Twitch decides, numbers = max. vertical resolution, 'min' = lowest available.
+export const QUALITIES = ['auto', '1080', '720', '480', '360', 'min'];
+const DEFAULT_Q_MAIN = 'auto';
+const DEFAULT_Q_SIDE = 'min';
 const CHANNEL_RE = /^[a-z0-9_]{1,25}$/;
 
 // First path segments on twitch.tv that are pages, not channels.
@@ -58,21 +62,42 @@ export function parseChannelList(text) {
   return { channels, invalid };
 }
 
-// Lowest real quality id (e.g. "160p30") from player.getQualities() (objects or strings), or null.
-export function lowestQuality(qualities) {
-  if (!Array.isArray(qualities)) return null;
-  let best = null, bestRes = Infinity;
+// Player qualities (objects {name, group} or strings) -> [{ id, res }] with a real resolution.
+function realQualities(qualities) {
+  if (!Array.isArray(qualities)) return [];
+  const out = [];
   for (const q of qualities) {
-    const name = typeof q === 'string' ? q : q && (q.group || q.name);
-    if (!name || name === 'auto' || name === 'chunked' || name === 'audio_only') continue;
-    const res = parseInt(String(name), 10);
-    if (Number.isFinite(res) && res < bestRes) { bestRes = res; best = name; }
+    const id = typeof q === 'string' ? q : q && (q.group || q.name);
+    if (!id || id === 'auto' || id === 'audio_only') continue;
+    // "chunked" is the source quality; its resolution is in the name ("1080p60 (source)")
+    const label = id === 'chunked' && q && typeof q === 'object' ? String(q.name || '') : String(id);
+    const res = Number.parseInt(label, 10);
+    if (Number.isFinite(res)) out.push({ id, res });
   }
-  return best;
+  return out;
+}
+
+// Lowest real quality id (e.g. "160p30"), or null.
+export function lowestQuality(qualities) {
+  let best = null;
+  for (const q of realQualities(qualities)) if (!best || q.res < best.res) best = q;
+  return best ? best.id : null;
+}
+
+// Quality id to set for a preset: 'auto', 'min' or max. resolution ('1080', '720', ...).
+// Picks the highest available quality not above the limit, else the lowest. null = nothing to set yet.
+export function pickQuality(qualities, preset) {
+  if (preset === 'auto') return 'auto';
+  if (preset === 'min') return lowestQuality(qualities);
+  const limit = Number.parseInt(preset, 10);
+  const list = realQualities(qualities);
+  let best = null;
+  for (const q of list) if (q.res <= limit && (!best || q.res > best.res)) best = q;
+  return best ? best.id : lowestQuality(qualities);
 }
 
 export function defaultState() {
-  return { channels: [], layout: 'grid', audio: null };
+  return { channels: [], layout: 'grid', audio: null, qMain: DEFAULT_Q_MAIN, qSide: DEFAULT_Q_SIDE };
 }
 
 export function sanitizeState(raw) {
@@ -85,6 +110,8 @@ export function sanitizeState(raw) {
   }
   st.layout = LAYOUTS.includes(raw.layout) ? raw.layout : 'grid';
   st.audio = st.channels.includes(raw.audio) ? raw.audio : st.channels[0] || null;
+  st.qMain = QUALITIES.includes(raw.qMain) ? raw.qMain : DEFAULT_Q_MAIN;
+  st.qSide = QUALITIES.includes(raw.qSide) ? raw.qSide : DEFAULT_Q_SIDE;
   return st;
 }
 

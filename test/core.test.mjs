@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  normalizeChannel, parseChannelList, addChannels, lowestQuality, sanitizeState, parseQuery, toQuery, addChannel, removeChannel, moveChannel,
+  normalizeChannel, parseChannelList, addChannels, lowestQuality, pickQuality, sanitizeState, parseQuery, toQuery, addChannel, removeChannel, moveChannel,
   layoutRects, spatialNext, MAX_CHANNELS,
 } from '../js/core.js';
 
@@ -54,12 +54,29 @@ test('lowestQuality picks smallest real resolution', () => {
   assert.equal(lowestQuality(undefined), null);
 });
 
+test('pickQuality honours presets with fallback', () => {
+  const qs = [{ name: 'Auto', group: 'auto' }, { name: '1080p60 (Quelle)', group: 'chunked' }, { name: '720p60', group: '720p60' },
+    { name: '480p', group: '480p30' }, { name: '160p', group: '160p30' }, { name: 'Audio', group: 'audio_only' }];
+  assert.equal(pickQuality(qs, 'auto'), 'auto');
+  assert.equal(pickQuality(qs, '1080'), 'chunked');
+  assert.equal(pickQuality(qs, '720'), '720p60');
+  assert.equal(pickQuality(qs, '360'), '160p30');
+  assert.equal(pickQuality(qs, 'min'), '160p30');
+  assert.equal(pickQuality([{ group: '720p30' }], '480'), '720p30'); // nothing below limit -> lowest there is
+  assert.equal(pickQuality([], '720'), null);
+});
+
+test('quality settings are sanitized', () => {
+  assert.deepEqual([sanitizeState({ qMain: '1080', qSide: '360' }).qMain, sanitizeState({ qSide: '360' }).qSide], ['1080', '360']);
+  assert.deepEqual([sanitizeState({ qMain: 'x' }).qMain, sanitizeState({ qSide: 99 }).qSide], ['auto', 'min']);
+});
+
 test('normalizeChannel rejects junk', () => {
   for (const bad of ['', '   ', 'a-b', '<script>', 'x'.repeat(26), 'two words', null, 42]) assert.equal(normalizeChannel(bad), null);
 });
 
 test('query roundtrip', () => {
-  const st = { channels: ['a', 'b', 'c'], layout: 'spotlight', audio: 'b' };
+  const st = { channels: ['a', 'b', 'c'], layout: 'spotlight', audio: 'b', qMain: 'auto', qSide: 'min' };
   const q = toQuery(st);
   assert.equal(q, '?c=a,b,c&l=spotlight&a=b');
   assert.deepEqual(parseQuery(q), st);
@@ -67,7 +84,7 @@ test('query roundtrip', () => {
 
 test('parseQuery defaults and sanitizes', () => {
   assert.equal(parseQuery(''), null);
-  assert.deepEqual(parseQuery('?c=A,a,bad-name,b&l=nope&a=zzz'), { channels: ['a', 'b'], layout: 'grid', audio: 'a' });
+  assert.deepEqual(parseQuery('?c=A,a,bad-name,b&l=nope&a=zzz'), { channels: ['a', 'b'], layout: 'grid', audio: 'a', qMain: 'auto', qSide: 'min' });
 });
 
 test('sanitizeState caps channel count', () => {
@@ -88,7 +105,7 @@ test('add / remove / move channels', () => {
   assert.deepEqual(st.channels, ['two', 'one']);
   assert.equal(moveChannel(st, 'two', -1), st);
   st = removeChannel(st, 'one');
-  assert.deepEqual(st, { channels: ['two'], layout: 'grid', audio: 'two' });
+  assert.deepEqual(st, { channels: ['two'], layout: 'grid', audio: 'two', qMain: 'auto', qSide: 'min' });
 });
 
 const inside = (r) => r.x >= -1e-9 && r.y >= -1e-9 && r.x + r.w <= 100 + 1e-9 && r.y + r.h <= 100 + 1e-9;

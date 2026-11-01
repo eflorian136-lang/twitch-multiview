@@ -229,3 +229,23 @@ test('performance: side cams lowest quality, hidden streams paused', { skip: !ch
   assert.deepEqual(await q(), { p1: ['160p30', false], p2: ['auto', false], p3: ['160p30', false] });
   assert.deepEqual(errors, []);
 });
+
+test('quality can be chosen per main stream and side cams, kept on this device', { skip: !chromium && 'playwright missing' }, async () => {
+  const { page, errors } = await open('?c=q1,q2');
+  const fire = () => page.evaluate(() => Object.values(window.__players).forEach((p) => p.ev.playing && p.ev.playing()));
+  const q = () => page.evaluate(() => Object.fromEntries(Object.entries(window.__players).map(([k, v]) => [k, v.quality])));
+  await fire();
+  assert.deepEqual(await q(), { q1: 'auto', q2: '160p30' });
+  await page.keyboard.press('m');
+  await page.click('[data-qmain="1080"]');
+  await page.click('[data-qside="480"]');
+  assert.deepEqual(await q(), { q1: 'chunked', q2: '480p30' });
+  assert.ok(await page.locator('[data-qmain="1080"]').evaluate((b) => b.classList.contains('active')));
+  assert.doesNotMatch(page.url(), /qMain|qSide/);
+
+  // a shared link opened on this device keeps the device quality
+  await page.goto(base + '?c=q3');
+  await fire();
+  assert.deepEqual(await q(), { q3: 'chunked' });
+  assert.deepEqual(errors, []);
+});

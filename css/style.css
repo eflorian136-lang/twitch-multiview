@@ -74,3 +74,6 @@ body.menu-open .open-menu { display: none; }
 .results .meta span { color: var(--muted); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .results .acts { display: flex; gap: 6px; }
 .results .acts button { padding: 4px 10px; font-size: 14px; }
+.qrow { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-bottom: 8px; }
+.qlabel { width: 110px; color: var(--muted); font-size: 15px; }
+.qrow button { padding: 6px 12px; font-size: 15px; }

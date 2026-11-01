@@ -1,6 +1,6 @@
 import {
   LAYOUTS, MAX_CHANNELS, sanitizeState, parseQuery, toQuery, addChannel, addChannels, parseChannelList, removeChannel,
-  moveChannel, layoutRects, spatialNext, lowestQuality,
+  moveChannel, layoutRects, spatialNext, pickQuality, QUALITIES,
 } from './core.js';
 import { TWITCH_CLIENT_ID } from './config.js';
 import { createTwitch } from './twitch.js';
@@ -12,13 +12,12 @@ const tiles = new Map(); // channel -> { el, player, playerEl, rect, quality, pa
 
 // ---------- state ----------
 function loadState() {
+  let stored = null;
+  try { stored = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch { stored = null; }
   const fromUrl = parseQuery(location.search);
-  if (fromUrl) return fromUrl;
-  try {
-    return sanitizeState(JSON.parse(localStorage.getItem(STORE_KEY) || 'null'));
-  } catch {
-    return sanitizeState(null);
-  }
+  // Quality is a per-device setting (Fire TV vs. PC), so it is not part of the shared link.
+  if (fromUrl) return stored ? sanitizeState({ ...fromUrl, qMain: stored.qMain, qSide: stored.qSide }) : fromUrl;
+  return sanitizeState(stored);
 }
 
 let state = loadState();
@@ -69,7 +68,8 @@ function tunePlayer(ch) {
       return;
     }
     if (t.paused) { p.play(); t.paused = false; }
-    const want = ch === state.audio && state.channels.length > 0 ? 'auto' : lowestQuality(p.getQualities && p.getQualities());
+    const preset = ch === state.audio ? state.qMain : state.qSide;
+    const want = pickQuality(p.getQualities && p.getQualities(), preset);
     if (want && t.quality !== want) {
       p.setQuality(want);
       t.quality = want;
@@ -154,6 +154,8 @@ function render() {
 
 function renderMenu() {
   document.querySelectorAll('#layouts [data-layout]').forEach((b) => b.classList.toggle('active', b.dataset.layout === state.layout));
+  document.querySelectorAll('[data-qmain]').forEach((b) => b.classList.toggle('active', b.dataset.qmain === state.qMain));
+  document.querySelectorAll('[data-qside]').forEach((b) => b.classList.toggle('active', b.dataset.qside === state.qSide));
   const list = $('list');
   // Remember which list button had focus so the remote does not lose its place after re-render.
   const act = document.activeElement;
@@ -284,8 +286,11 @@ if (navigator.clipboard && navigator.clipboard.readText && window.isSecureContex
   $('pasteBtn').hidden = false;
   $('pasteBtn').addEventListener('click', async () => {
     let text = '';
-    try { text = await navigator.clipboard.readText(); } catch {
-      return msg('Zwischenablage nicht lesbar. Link ins Feld einfuegen.');
+    try {
+      text = await navigator.clipboard.readText();
+    } catch {
+      msg('Zwischenablage nicht lesbar. Link ins Feld einfuegen.');
+      return;
     }
     if (!addFromText(text)) {
       $('channelInput').value = text.trim();
@@ -296,6 +301,13 @@ if (navigator.clipboard && navigator.clipboard.readText && window.isSecureContex
 
 document.querySelectorAll('#layouts [data-layout]').forEach((b) => {
   b.addEventListener('click', () => LAYOUTS.includes(b.dataset.layout) && setState({ ...state, layout: b.dataset.layout }));
+});
+
+document.querySelectorAll('[data-qmain]').forEach((b) => {
+  b.addEventListener('click', () => QUALITIES.includes(b.dataset.qmain) && setState({ ...state, qMain: b.dataset.qmain }));
+});
+document.querySelectorAll('[data-qside]').forEach((b) => {
+  b.addEventListener('click', () => QUALITIES.includes(b.dataset.qside) && setState({ ...state, qSide: b.dataset.qside }));
 });
 
 $('copyLink').addEventListener('click', async () => {

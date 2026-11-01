@@ -1,0 +1,51 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Website the app shows. Override with -PstartUrl=https://... when building.
+def startUrl = project.findProperty('startUrl') ?: 'https://eflorian136-lang.github.io/twitch-multiview/'
+def ks = System.getenv('KEYSTORE_FILE')
+
+android {
+    namespace 'de.multiview.tv'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'de.multiview.tv'
+        minSdk 22          // Fire OS 5 (aelteste Fire TV Sticks)
+        targetSdk 34
+        versionCode((System.getenv('VERSION_CODE') ?: '1') as int)
+        versionName '1.0.' + (System.getenv('VERSION_CODE') ?: '1')
+        buildConfigField 'String', 'START_URL', "\"${startUrl}\""
+    }
+
+    buildFeatures { buildConfig true }
+
+    signingConfigs {
+        release {
+            if (ks) {
+                storeFile file(ks)
+                storePassword System.getenv('KEYSTORE_PASSWORD')
+                keyAlias System.getenv('KEY_ALIAS')
+                keyPassword System.getenv('KEY_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig ks ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

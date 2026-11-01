@@ -1,0 +1,101 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  normalizeChannel, sanitizeState, parseQuery, toQuery, addChannel, removeChannel, moveChannel,
+  layoutRects, spatialNext, MAX_CHANNELS,
+} from '../js/core.js';
+
+test('normalizeChannel accepts names and URLs', () => {
+  assert.equal(normalizeChannel('Papaplatte'), 'papaplatte');
+  assert.equal(normalizeChannel(' @monte '), 'monte');
+  assert.equal(normalizeChannel('https://www.twitch.tv/Trymacs/videos'), 'trymacs');
+  assert.equal(normalizeChannel('twitch.tv/gronkh?x=1'), 'gronkh');
+  assert.equal(normalizeChannel('m.twitch.tv/abc_1'), 'abc_1');
+});
+
+test('normalizeChannel rejects junk', () => {
+  for (const bad of ['', '   ', 'a-b', '<script>', 'x'.repeat(26), 'two words', null, 42]) assert.equal(normalizeChannel(bad), null);
+});
+
+test('query roundtrip', () => {
+  const st = { channels: ['a', 'b', 'c'], layout: 'spotlight', audio: 'b' };
+  const q = toQuery(st);
+  assert.equal(q, '?c=a,b,c&l=spotlight&a=b');
+  assert.deepEqual(parseQuery(q), st);
+});
+
+test('parseQuery defaults and sanitizes', () => {
+  assert.equal(parseQuery(''), null);
+  assert.deepEqual(parseQuery('?c=A,a,bad-name,b&l=nope&a=zzz'), { channels: ['a', 'b'], layout: 'grid', audio: 'a' });
+});
+
+test('sanitizeState caps channel count', () => {
+  const many = Array.from({ length: 20 }, (_, i) => 'c' + i);
+  assert.equal(sanitizeState({ channels: many }).channels.length, MAX_CHANNELS);
+});
+
+test('add / remove / move channels', () => {
+  let st = sanitizeState({});
+  let r = addChannel(st, 'twitch.tv/One');
+  assert.equal(r.error, null);
+  st = r.state;
+  assert.equal(st.audio, 'one');
+  assert.match(addChannel(st, 'one').error, /schon/);
+  assert.match(addChannel(st, '!!').error, /Ungueltig/);
+  st = addChannel(st, 'two').state;
+  st = moveChannel(st, 'two', -1);
+  assert.deepEqual(st.channels, ['two', 'one']);
+  assert.equal(moveChannel(st, 'two', -1), st);
+  st = removeChannel(st, 'one');
+  assert.deepEqual(st, { channels: ['two'], layout: 'grid', audio: 'two' });
+});
+
+const inside = (r) => r.x >= -1e-9 && r.y >= -1e-9 && r.x + r.w <= 100 + 1e-9 && r.y + r.h <= 100 + 1e-9;
+
+test('layouts stay inside viewport for 1..9 channels', () => {
+  for (const l of ['grid', 'spotlight', 'pip', 'single']) {
+    for (let n = 1; n <= 9; n++) {
+      const rects = layoutRects(l, n, n - 1);
+      assert.equal(rects.length, n);
+      for (const r of rects) if (r) assert.ok(inside(r), `${l} n=${n} ${JSON.stringify(r)}`);
+    }
+  }
+});
+
+test('grid tiles do not overlap', () => {
+  for (let n = 2; n <= 9; n++) {
+    const rs = layoutRects('grid', n);
+    for (let i = 0; i < n; i++)
+      for (let j = i + 1; j < n; j++) {
+        const a = rs[i], b = rs[j];
+        const overlap = a.x < b.x + b.w - 1e-9 && b.x < a.x + a.w - 1e-9 && a.y < b.y + b.h - 1e-9 && b.y < a.y + a.h - 1e-9;
+        assert.ok(!overlap, `n=${n} ${i}/${j}`);
+      }
+  }
+});
+
+test('spotlight puts main channel big', () => {
+  const rs = layoutRects('spotlight', 3, 2);
+  assert.deepEqual(rs[2], { x: 0, y: 0, w: 75, h: 100 });
+  assert.equal(rs[0].x, 75);
+});
+
+test('single shows only main channel', () => {
+  const rs = layoutRects('single', 3, 1);
+  assert.equal(rs[0], null);
+  assert.deepEqual(rs[1], { x: 0, y: 0, w: 100, h: 100 });
+});
+
+test('spatialNext on 2x2 grid', () => {
+  const rs = layoutRects('grid', 4); // 0 1 / 2 3
+  assert.equal(spatialNext(rs, 0, 'right'), 1);
+  assert.equal(spatialNext(rs, 0, 'down'), 2);
+  assert.equal(spatialNext(rs, 3, 'up'), 1);
+  assert.equal(spatialNext(rs, 3, 'left'), 2);
+  assert.equal(spatialNext(rs, 0, 'up'), -1);
+  assert.equal(spatialNext(rs, 0, 'left'), -1);
+});
+
+test('spatialNext skips hidden tiles', () => {
+  assert.equal(spatialNext([{ x: 0, y: 0, w: 50, h: 100 }, null, { x: 50, y: 0, w: 50, h: 100 }], 0, 'right'), 2);
+});

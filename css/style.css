@@ -1,0 +1,65 @@
+:root {
+  --bg: #0e0e10;
+  --panel: #18181b;
+  --line: #3a3a42;
+  --text: #efeff1;
+  --muted: #adadb8;
+  --accent: #9147ff;
+  --focus: #ffd400;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 18px/1.4 system-ui, sans-serif; overflow: hidden; }
+h1 { margin: 0; font-size: 26px; }
+h2 { margin: 22px 0 8px; font-size: 15px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+button, input { font: inherit; color: var(--text); background: #26262c; border: 2px solid var(--line); border-radius: 8px; padding: 10px 16px; }
+button { cursor: pointer; }
+button.primary, button.active { background: var(--accent); border-color: var(--accent); }
+input { flex: 1; min-width: 0; }
+/* Big, obvious focus ring for TV remotes */
+.nav:focus { outline: 4px solid var(--focus); outline-offset: -4px; }
+.tile:focus { outline: none; }
+.tile:focus::after { content: ''; position: absolute; inset: 0; z-index: 5; border: 5px solid var(--focus); pointer-events: none; }
+button:focus, input:focus { border-color: var(--focus); }
+
+.stage { position: fixed; inset: 0; background: #000; }
+.tile { position: absolute; overflow: hidden; background: #000; transition: left .25s, top .25s, width .25s, height .25s; }
+.tile.hidden-tile { visibility: hidden; pointer-events: none; }
+.tile .player, .tile .player iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+/* Transparent cover so remote/mouse focus goes to the tile, not into the Twitch iframe */
+.tile .cover { position: absolute; inset: 0; z-index: 2; }
+.tile .label { position: absolute; left: 10px; bottom: 10px; z-index: 3; padding: 3px 10px; border-radius: 6px; background: rgba(0,0,0,.65); font-size: 15px; pointer-events: none; opacity: 0; transition: opacity .2s; }
+.tile:focus .label, .tile.audio .label, body.show-labels .label { opacity: 1; }
+.tile.audio .label::before { content: 'Ton: '; color: var(--focus); }
+.tile.pip-small { z-index: 4; box-shadow: 0 0 0 2px rgba(0,0,0,.8); border-radius: 6px; }
+
+.welcome { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; color: var(--muted); padding: 24px; }
+
+.menu { position: fixed; inset: 0 auto 0 0; width: min(560px, 100vw); z-index: 20; background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; transform: translateX(-100%); transition: transform .2s; }
+body.menu-open .menu { transform: none; }
+.menu-inner { padding: 24px; }
+.menu-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.msg { min-height: 1.4em; margin: 8px 0 0; color: #ff8080; }
+.msg.ok { color: #7ee787; }
+.hint { color: var(--muted); font-size: 15px; margin: 8px 0 0; }
+.list { list-style: none; margin: 0; padding: 0; }
+.list li { display: flex; gap: 6px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); }
+.list li:first-child { border-top: 0; }
+.list .name { flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.list button { padding: 6px 12px; font-size: 15px; }
+
+.open-menu { position: fixed; top: 12px; left: 12px; z-index: 10; display: none; }
+body.mouse-active .open-menu { display: block; }
+body.menu-open .open-menu { display: none; }
+
+/* Stream finder */
+.device { margin: 10px 0; padding: 12px; border: 2px dashed var(--accent); border-radius: 8px; }
+.device .code { font: 700 40px/1.2 ui-monospace, monospace; letter-spacing: .15em; margin-top: 6px; color: var(--focus); }
+.results { list-style: none; margin: 8px 0 0; padding: 0; }
+.results li { display: grid; grid-template-columns: 112px 1fr; gap: 4px 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+.results img { width: 112px; height: 63px; object-fit: cover; border-radius: 4px; background: #222; grid-row: span 2; }
+.results .meta { min-width: 0; font-size: 15px; }
+.results .meta b { display: block; }
+.results .meta span { color: var(--muted); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.results .acts { display: flex; gap: 6px; }
+.results .acts button { padding: 4px 10px; font-size: 14px; }

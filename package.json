@@ -1,0 +1,10 @@
+{
+  "name": "twitch-multiview",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Mehrere Twitch-Streams gleichzeitig ansehen, auch auf dem Fire TV Stick",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "serve": "node test/serve.mjs"
+  }
+}

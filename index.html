@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MultiView</title>
+<meta name="description" content="Mehrere Twitch-Streams gleichzeitig ansehen - auch auf dem Fire TV Stick.">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="stage" class="stage" aria-label="Streams"></div>
+
+<div id="menu" class="menu" role="dialog" aria-label="Menue">
+  <div class="menu-inner">
+    <div class="menu-head">
+      <h1>MultiView</h1>
+      <button id="closeMenu" class="nav">Schliessen</button>
+    </div>
+    <form id="addForm" class="row">
+      <input id="channelInput" class="nav" placeholder="Twitch-Kanal oder Link" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <button class="nav primary">Hinzufuegen</button>
+    </form>
+    <p id="msg" class="msg" aria-live="polite"></p>
+
+    <section id="finder" hidden>
+      <h2>Live-Streams finden</h2>
+      <div id="loginBox">
+        <button id="loginBtn" class="nav primary">Mit Twitch anmelden</button>
+        <div id="deviceBox" class="device" hidden>
+          <div>Am Handy <b id="deviceUrl">twitch.tv/activate</b> oeffnen und diesen Code eingeben:</div>
+          <div id="deviceCode" class="code"></div>
+        </div>
+        <p class="hint">Anmeldung ist noetig, damit Twitch die Liste der Live-Streams herausgibt.</p>
+      </div>
+      <div id="finderBox" hidden>
+        <div class="row" id="tabs">
+          <button class="nav" data-tab="followed">Gefolgt</button>
+          <button class="nav" data-tab="top">Top DE</button>
+          <button class="nav" data-tab="topall">Top weltweit</button>
+          <button id="logoutBtn" class="nav">Abmelden</button>
+        </div>
+        <form id="searchForm" class="row" style="margin-top:8px">
+          <input id="searchInput" class="nav" placeholder="Streamer suchen" autocomplete="off" autocapitalize="off" spellcheck="false">
+          <button class="nav">Suchen</button>
+        </form>
+        <p id="finderMsg" class="hint"></p>
+        <ul id="results" class="results"></ul>
+      </div>
+    </section>
+
+    <h2>Layout</h2>
+    <div id="layouts" class="row">
+      <button class="nav" data-layout="grid">Raster</button>
+      <button class="nav" data-layout="spotlight">Spotlight</button>
+      <button class="nav" data-layout="pip">Bild in Bild</button>
+      <button class="nav" data-layout="single">Nur einer</button>
+    </div>
+
+    <h2>Kanaele</h2>
+    <ul id="list" class="list"></ul>
+    <p id="empty" class="hint">Noch keine Kanaele. Oben einen Twitch-Namen eingeben.</p>
+
+    <h2>Link fuer Fire TV / Freunde</h2>
+    <div class="row">
+      <input id="shareLink" class="nav" readonly>
+      <button id="copyLink" class="nav">Kopieren</button>
+    </div>
+    <p class="hint">Tipp: Am Handy einrichten, Link am Fire TV im Silk-Browser oeffnen und als Lesezeichen speichern.</p>
+    <p class="hint keys">Fernbedienung: Pfeile = Stream waehlen, OK = Ton auf diesen Stream, nochmal OK = Vollbild, Menue-Taste oder Pfeil hoch am oberen Rand = dieses Menue.</p>
+  </div>
+</div>
+
+<button id="openMenu" class="open-menu nav" aria-label="Menue oeffnen">Menue</button>
+
+<script src="https://player.twitch.tv/js/embed/v1.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

@@ -46,6 +46,12 @@ public class MainActivity extends Activity {
         s.setMediaPlaybackRequiresUserGesture(false); // streams start with sound
         s.setLoadWithOverviewMode(true);
         s.setUseWideViewPort(true);
+        // Nothing the page needs: keep the WebView lean
+        s.setGeolocationEnabled(false);
+        s.setAllowFileAccess(false);
+        s.setSaveFormData(false);
+        s.setSupportZoom(false);
+        s.setBuiltInZoomControls(false);
 
         web.setWebChromeClient(new WebChromeClient());
         web.setWebViewClient(new WebViewClient() {
@@ -146,13 +152,17 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         super.onPause();
+        // In the background: stop all streams, then freeze JS timers and rendering (saves CPU, network, heat)
+        web.evaluateJavascript("window.setAppHidden && window.setAppHidden(true)", r -> web.pauseTimers());
         web.onPause();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
+        web.resumeTimers();
         web.onResume();
+        web.evaluateJavascript("window.setAppHidden && window.setAppHidden(false)", null);
         hideSystemUi();
         // check for a new app version at most every 6 hours
         long now = System.currentTimeMillis();

@@ -63,7 +63,7 @@ function tunePlayer(ch) {
   if (!t || !t.player) return;
   const p = t.player;
   try {
-    if (!t.rect || document.hidden) {
+    if (!t.rect || document.hidden || appHidden) {
       if (!t.paused) { p.pause(); t.paused = true; }
       return;
     }
@@ -91,9 +91,16 @@ function applyAudio() {
   }
 }
 
-document.addEventListener('visibilitychange', () => {
+// Pause everything while the page / Fire TV app is in the background.
+let appHidden = false;
+const retuneAll = () => {
   for (const ch of tiles.keys()) tunePlayer(ch);
-});
+};
+document.addEventListener('visibilitychange', retuneAll);
+window.setAppHidden = (hidden) => {
+  appHidden = !!hidden;
+  retuneAll();
+};
 
 // ---------- render ----------
 function makeTile(channel) {
@@ -405,7 +412,11 @@ document.addEventListener('keydown', (e) => {
 });
 
 let mouseTimer;
+let lastPointer = 0;
 const showPointerUi = () => {
+  const now = Date.now();
+  if (now - lastPointer < 500) return; // mousemove fires very often; once per 0.5 s is enough
+  lastPointer = now;
   document.body.classList.add('mouse-active');
   clearTimeout(mouseTimer);
   mouseTimer = setTimeout(() => document.body.classList.remove('mouse-active'), 4000);

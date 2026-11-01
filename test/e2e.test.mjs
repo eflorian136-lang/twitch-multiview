@@ -107,7 +107,6 @@ test('layouts and persistence across reload', { skip: !chromium && 'playwright m
 
   await page.keyboard.press('m');
   await page.click('#layouts [data-layout="pip"]');
-  await page.waitForTimeout(400); // CSS transition
   const small = await page.locator('.tile[data-channel="x1"]').boundingBox();
   assert.ok(small.width < 400);
 
@@ -247,5 +246,15 @@ test('quality can be chosen per main stream and side cams, kept on this device',
   await page.goto(base + '?c=q3');
   await fire();
   assert.deepEqual(await q(), { q3: 'chunked' });
+  assert.deepEqual(errors, []);
+});
+
+test('app in background pauses all streams, resumes when back', { skip: !chromium && 'playwright missing' }, async () => {
+  const { page, errors } = await open('?c=h1,h2');
+  const paused = () => page.evaluate(() => Object.fromEntries(Object.entries(window.__players).map(([k, v]) => [k, v.paused])));
+  await page.evaluate(() => window.setAppHidden(true));
+  assert.deepEqual(await paused(), { h1: true, h2: true });
+  await page.evaluate(() => window.setAppHidden(false));
+  assert.deepEqual(await paused(), { h1: false, h2: false });
   assert.deepEqual(errors, []);
 });

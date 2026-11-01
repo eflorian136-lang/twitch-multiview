@@ -282,20 +282,23 @@ $('channelInput').addEventListener('paste', (e) => {
     addFromText(text);
   }
 });
+async function pasteFromClipboard() {
+  let text = '';
+  try {
+    text = await navigator.clipboard.readText();
+  } catch {
+    msg('Zwischenablage nicht lesbar. Link ins Feld einfuegen.');
+    return;
+  }
+  if (!addFromText(text)) {
+    $('channelInput').value = text.trim();
+    updatePreview();
+  }
+}
 if (navigator.clipboard && navigator.clipboard.readText && window.isSecureContext) {
   $('pasteBtn').hidden = false;
-  $('pasteBtn').addEventListener('click', async () => {
-    let text = '';
-    try {
-      text = await navigator.clipboard.readText();
-    } catch {
-      msg('Zwischenablage nicht lesbar. Link ins Feld einfuegen.');
-      return;
-    }
-    if (!addFromText(text)) {
-      $('channelInput').value = text.trim();
-      updatePreview();
-    }
+  $('pasteBtn').addEventListener('click', () => {
+    pasteFromClipboard().catch(() => msg('Einfuegen fehlgeschlagen'));
   });
 }
 

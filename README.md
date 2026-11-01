@@ -1,5 +1,7 @@
 # MultiView
 
+Website: https://eflorian136-lang.github.io/twitch-multiview/
+
 Mehrere Twitch-Streams gleichzeitig ansehen: einen beliebigen Live-Stream als Hauptbild waehlen und weitere Streams/Cams dazu einblenden. Laeuft im Browser, am Handy und auf dem Amazon Fire TV Stick (als eigene App oder im Silk-Browser). Gehostet kostenlos ueber GitHub Pages, immer online, kein eigener PC noetig.
 
 ## Funktionen
@@ -25,7 +27,7 @@ Mehrere Twitch-Streams gleichzeitig ansehen: einen beliebigen Live-Stream als Ha
 1. Fire TV: Einstellungen > Mein Fire TV > Entwickleroptionen > Apps unbekannter Herkunft fuer "Downloader" erlauben (Entwickleroptionen erscheinen nach 7x Klick auf "Info > Fire TV Stick").
 2. App "Downloader" aus dem Amazon Store installieren.
 3. In Downloader diese Adresse eingeben:
-   `https://github.com/<besitzer>/twitch-multiview/releases/download/tv-app/MultiView.apk`
+   `https://github.com/eflorian136-lang/twitch-multiview/releases/download/tv-app/MultiView.apk`
 4. Installieren. "MultiView" erscheint unter "Deine Apps".
 
 Die APK wird bei jeder Aenderung in `android/` automatisch von GitHub Actions gebaut.
@@ -37,7 +39,7 @@ Damit Updates ohne Deinstallation gehen, als Repository-Secrets einen festen Sch
 Twitch gibt Listen von Live-Streams nur mit einer (kostenlosen) Client-ID heraus.
 
 1. https://dev.twitch.tv/console/apps > "Register Your Application"
-2. Name: beliebig, OAuth Redirect URL: `https://<besitzer>.github.io/twitch-multiview/`, Kategorie: Website Integration, Client-Typ: **Oeffentlich**
+2. Name: beliebig, OAuth Redirect URL: `https://eflorian136-lang.github.io/twitch-multiview/`, Kategorie: Website Integration, Client-Typ: **Oeffentlich**
 3. Client-ID kopieren und im Repository unter Settings > Secrets and variables > Actions > **Variables** als `TWITCH_CLIENT_ID` anlegen (die ID ist nicht geheim).
 4. Workflow "Website testen und veroeffentlichen" neu starten.
 

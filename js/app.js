@@ -452,14 +452,20 @@ if (navigator.clipboard && navigator.clipboard.readText && window.isSecureContex
 }
 
 document.querySelectorAll('#layouts [data-layout]').forEach((b) => {
-  b.addEventListener('click', () => LAYOUTS.includes(b.dataset.layout) && setState({ ...state, layout: b.dataset.layout }));
+  b.addEventListener('click', () => {
+    if (LAYOUTS.includes(b.dataset.layout)) setState({ ...state, layout: b.dataset.layout });
+  });
 });
 
 document.querySelectorAll('[data-qmain]').forEach((b) => {
-  b.addEventListener('click', () => QUALITIES.includes(b.dataset.qmain) && setState({ ...state, qMain: b.dataset.qmain }));
+  b.addEventListener('click', () => {
+    if (QUALITIES.includes(b.dataset.qmain)) setState({ ...state, qMain: b.dataset.qmain });
+  });
 });
 document.querySelectorAll('[data-qside]').forEach((b) => {
-  b.addEventListener('click', () => QUALITIES.includes(b.dataset.qside) && setState({ ...state, qSide: b.dataset.qside }));
+  b.addEventListener('click', () => {
+    if (QUALITIES.includes(b.dataset.qside)) setState({ ...state, qSide: b.dataset.qside });
+  });
 });
 
 $('copyLink').addEventListener('click', async () => {
@@ -533,7 +539,10 @@ function finishCropEdit() {
 
 function renderCropEdit() {
   const t = tiles.get(cropEdit.ch);
-  if (!t) return finishCropEdit();
+  if (!t) {
+    finishCropEdit();
+    return;
+  }
   t.el.classList.add('editing');
   const crop = state.crops[cropEdit.ch];
   const frame = $('cropFrame');
@@ -570,9 +579,14 @@ document.querySelectorAll('[data-corner]').forEach((b) => b.addEventListener('cl
   const cur = state.crops[cropEdit.ch];
   setState(setCrop(state, cropEdit.ch, cropPreset(b.dataset.corner, cur ? cur[2] : 30)));
 }));
-$('cropBigger').addEventListener('click', () => cropEdit && setState(setCrop(state, cropEdit.ch, adjustCrop(state.crops[cropEdit.ch], { ds: CROP_STEP * 2 }))));
-$('cropSmaller').addEventListener('click', () => cropEdit && setState(setCrop(state, cropEdit.ch, adjustCrop(state.crops[cropEdit.ch], { ds: -CROP_STEP * 2 }))));
-$('cropMode').addEventListener('click', () => cropEdit && toggleCropMode());
+const resizeCrop = (ds) => {
+  if (cropEdit) setState(setCrop(state, cropEdit.ch, adjustCrop(state.crops[cropEdit.ch], { ds })));
+};
+$('cropBigger').addEventListener('click', () => resizeCrop(CROP_STEP * 2));
+$('cropSmaller').addEventListener('click', () => resizeCrop(-CROP_STEP * 2));
+$('cropMode').addEventListener('click', () => {
+  if (cropEdit) toggleCropMode();
+});
 $('cropWhole').addEventListener('click', () => {
   if (!cropEdit) return;
   rememberCrop(cropEdit.ch, null);
@@ -651,7 +665,10 @@ async function syncDelays(manual) {
     return;
   }
   const before = spreadOf(l);
-  if (before < 1 && manual) return updateDelayInfo('Schon gleich');
+  if (before < 1 && manual) {
+    updateDelayInfo('Schon gleich');
+    return;
+  }
   if (before < 1) return;
   syncing = true;
   const target = Math.max(...l.map((x) => x.lat));
@@ -673,7 +690,9 @@ async function syncDelays(manual) {
   } else updateDelayInfo(`angeglichen (vorher ${before.toFixed(1)} s)`);
 }
 
-$('syncNow').addEventListener('click', () => syncDelays(true));
+$('syncNow').addEventListener('click', () => {
+  syncDelays(true).catch(() => {});
+});
 $('autoSync').addEventListener('click', () => {
   autoSync = !autoSync;
   try { localStorage.setItem(SYNC_KEY, autoSync ? '1' : '0'); } catch {}
@@ -681,7 +700,7 @@ $('autoSync').addEventListener('click', () => {
 });
 setInterval(() => {
   if (menuOpen()) updateDelayInfo();
-  if (autoSync && !syncUnsupported && !document.hidden && !appHidden && !cropEdit) syncDelays(false);
+  if (autoSync && !syncUnsupported && !document.hidden && !appHidden && !cropEdit) syncDelays(false).catch(() => {});
 }, 20000);
 
 // ---------- remote control / keyboard ----------
@@ -701,7 +720,10 @@ function navInMenu(dir) {
     return { x: r.left, y: r.top, w: r.width, h: r.height };
   });
   const from = els.indexOf(document.activeElement);
-  if (from < 0) return els[0] && els[0].focus();
+  if (from < 0) {
+    if (els[0]) els[0].focus();
+    return;
+  }
   const next = spatialNext(rects, from, dir);
   if (next >= 0) {
     els[next].focus();
@@ -712,7 +734,10 @@ function navInMenu(dir) {
 function navInStage(dir) {
   const chans = state.channels.filter((c) => tiles.get(c).rect);
   const current = chans.indexOf(document.activeElement && document.activeElement.dataset.channel);
-  if (current < 0) return focusTile(state.audio);
+  if (current < 0) {
+    focusTile(state.audio);
+    return;
+  }
   const next = spatialNext(chans.map((c) => tiles.get(c).rect), current, dir);
   if (next >= 0) tiles.get(chans[next]).el.focus();
   else if (dir === 'up' || dir === 'left') openMenu();
@@ -724,31 +749,38 @@ document.addEventListener('keydown', (e) => {
     const inBar = cropUi.contains(document.activeElement);
     if (dir && !inBar) {
       e.preventDefault();
-      return nudgeCrop(dir);
+      nudgeCrop(dir);
+      return;
     }
     if (dir && inBar && (dir === 'up' || dir === 'down')) {
       // up/down leaves the button bar and edits the frame again
       e.preventDefault();
       document.activeElement.blur();
-      return nudgeCrop(dir);
+      nudgeCrop(dir);
+      return;
     }
     if ((e.key === 'Enter' || e.key === ' ') && !inBar) {
       e.preventDefault();
-      return toggleCropMode();
+      toggleCropMode();
+      return;
     }
     if (e.key === 'Escape' || isMenuKey(e)) {
       e.preventDefault();
-      return finishCropEdit();
+      finishCropEdit();
+      return;
     }
     return;
   }
   if (isMenuKey(e) || (e.key === 'm' && !typing())) {
     e.preventDefault();
-    return menuOpen() ? closeMenu() : openMenu();
+    if (menuOpen()) closeMenu();
+    else openMenu();
+    return;
   }
   if (e.key === 'Escape' && menuOpen()) {
     e.preventDefault();
-    return closeMenu();
+    closeMenu();
+    return;
   }
   if (menuOpen()) {
     // inside the text field, left/right move the cursor
@@ -760,7 +792,8 @@ document.addEventListener('keydown', (e) => {
   }
   if (dir) {
     e.preventDefault();
-    return navInStage(dir);
+    navInStage(dir);
+    return;
   }
   if (e.key === 'Enter' || e.key === ' ') {
     const ch = document.activeElement && document.activeElement.dataset.channel;
@@ -811,7 +844,10 @@ function setMain(ch) {
   let next = state;
   if (!next.channels.includes(ch)) {
     const r = addChannel(next, ch);
-    if (r.error) return msg(r.error);
+    if (r.error) {
+      msg(r.error);
+      return;
+    }
     next = r.state;
   }
   const layout = next.layout === 'grid' && next.channels.length > 1 ? 'spotlight' : next.layout;
@@ -821,7 +857,10 @@ function setMain(ch) {
 
 function addCam(ch) {
   const r = addChannel(state, ch);
-  if (r.error) return msg(r.error);
+  if (r.error) {
+    msg(r.error);
+    return;
+  }
   setState({ ...r.state, audio: state.audio || ch });
   msg(`${ch} dazugefuegt`, true);
 }
@@ -909,7 +948,8 @@ async function startLogin() {
       if (run !== loginRun) return;
       if (Date.now() > deadline) {
         $('deviceBox').hidden = true;
-        return msg('Code abgelaufen, bitte neu anmelden');
+        msg('Code abgelaufen, bitte neu anmelden');
+        return;
       }
       let res;
       try { res = await twitch.pollDeviceLogin(d.deviceCode); } catch { res = 'pending'; }
@@ -922,7 +962,8 @@ async function startLogin() {
       }
       if (res === 'expired') {
         $('deviceBox').hidden = true;
-        return msg('Anmeldung abgebrochen oder abgelaufen');
+        msg('Anmeldung abgebrochen oder abgelaufen');
+        return;
       }
       if (res === 'slow_down') interval += 5000;
       devicePoll = setTimeout(poll, interval);
@@ -936,7 +977,9 @@ async function startLogin() {
 }
 
 if (twitch.enabled) {
-  $('loginBtn').addEventListener('click', startLogin);
+  $('loginBtn').addEventListener('click', () => {
+    startLogin().catch(() => {});
+  });
   $('logoutBtn').addEventListener('click', () => {
     loginRun++;
     clearTimeout(devicePoll);
@@ -944,11 +987,10 @@ if (twitch.enabled) {
     renderResults([], '');
     renderFinder();
   });
-  document.querySelectorAll('#tabs [data-tab]').forEach((b) => b.addEventListener('click', () => loadTab(b.dataset.tab)));
-  $('searchForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const q = $('searchInput').value.trim();
-    if (!q) return;
+  document.querySelectorAll('#tabs [data-tab]').forEach((b) => b.addEventListener('click', () => {
+    loadTab(b.dataset.tab).catch(() => {});
+  }));
+  const search = async (q) => {
     const run = ++finderRun;
     currentTab = 'search';
     renderFinder();
@@ -959,6 +1001,11 @@ if (twitch.enabled) {
     } catch (e2) {
       if (run === finderRun) finderError(e2);
     }
+  };
+  $('searchForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const q = $('searchInput').value.trim();
+    if (q) search(q).catch(() => {});
   });
   if (location.hash.includes('access_token=')) {
     twitch.finishImplicitLogin(location.hash).then(() => {
@@ -987,8 +1034,12 @@ updateDelayInfo();
 
 // Hooks for the Fire TV app (Android WebView calls these for the Menu and Back keys)
 window.toggleMenu = () => {
-  if (cropEdit) return finishCropEdit();
-  return menuOpen() ? closeMenu() : openMenu();
+  if (cropEdit) {
+    finishCropEdit();
+    return;
+  }
+  if (menuOpen()) closeMenu();
+  else openMenu();
 };
 window.handleBack = () => {
   if (cropEdit) {

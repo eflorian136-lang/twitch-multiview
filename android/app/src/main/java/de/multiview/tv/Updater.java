@@ -95,7 +95,8 @@ public class Updater {
         new Thread(() -> {
             try {
                 final File apk = apkFile();
-                apk.getParentFile().mkdirs();
+                File dir = apk.getParentFile();
+                if (!dir.isDirectory() && !dir.mkdirs()) throw new Exception("no cache dir");
                 try (OutputStream out = new FileOutputStream(apk)) {
                     out.write(download(apkUrl));
                 }

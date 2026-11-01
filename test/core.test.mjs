@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   normalizeChannel, parseChannelList, addChannels, lowestQuality, pickQuality, sanitizeState, parseQuery, toQuery, addChannel, removeChannel, moveChannel,
-  layoutRects, spatialNext, MAX_CHANNELS,
+  layoutRects, spatialNext, MAX_CHANNELS, sanitizeCrop, cropPreset, adjustCrop, cropBox, setCrop,
 } from '../js/core.js';
 
 test('normalizeChannel accepts names and URLs', () => {
@@ -76,7 +76,7 @@ test('normalizeChannel rejects junk', () => {
 });
 
 test('query roundtrip', () => {
-  const st = { channels: ['a', 'b', 'c'], layout: 'spotlight', audio: 'b', qMain: 'auto', qSide: 'min' };
+  const st = { channels: ['a', 'b', 'c'], layout: 'spotlight', audio: 'b', qMain: 'auto', qSide: 'min', crops: {} };
   const q = toQuery(st);
   assert.equal(q, '?c=a,b,c&l=spotlight&a=b');
   assert.deepEqual(parseQuery(q), st);
@@ -84,7 +84,7 @@ test('query roundtrip', () => {
 
 test('parseQuery defaults and sanitizes', () => {
   assert.equal(parseQuery(''), null);
-  assert.deepEqual(parseQuery('?c=A,a,bad-name,b&l=nope&a=zzz'), { channels: ['a', 'b'], layout: 'grid', audio: 'a', qMain: 'auto', qSide: 'min' });
+  assert.deepEqual(parseQuery('?c=A,a,bad-name,b&l=nope&a=zzz'), { channels: ['a', 'b'], layout: 'grid', audio: 'a', qMain: 'auto', qSide: 'min', crops: {} });
 });
 
 test('sanitizeState caps channel count', () => {
@@ -105,7 +105,7 @@ test('add / remove / move channels', () => {
   assert.deepEqual(st.channels, ['two', 'one']);
   assert.equal(moveChannel(st, 'two', -1), st);
   st = removeChannel(st, 'one');
-  assert.deepEqual(st, { channels: ['two'], layout: 'grid', audio: 'two', qMain: 'auto', qSide: 'min' });
+  assert.deepEqual(st, { channels: ['two'], layout: 'grid', audio: 'two', qMain: 'auto', qSide: 'min', crops: {} });
 });
 
 const inside = (r) => r.x >= -1e-9 && r.y >= -1e-9 && r.x + r.w <= 100 + 1e-9 && r.y + r.h <= 100 + 1e-9;
@@ -156,4 +156,44 @@ test('spatialNext on 2x2 grid', () => {
 
 test('spatialNext skips hidden tiles', () => {
   assert.equal(spatialNext([{ x: 0, y: 0, w: 50, h: 100 }, null, { x: 50, y: 0, w: 50, h: 100 }], 0, 'right'), 2);
+});
+
+test('spotlight with many cams keeps cams at a third of the screen', () => {
+  for (let n = 5; n <= 6; n++) {
+    const rs = layoutRects('spotlight', n, 0);
+    for (const r of rs.slice(1)) assert.ok(r.h >= 33 && r.w >= 33, `n=${n} ${JSON.stringify(r)}`);
+  }
+});
+
+test('crop: sanitize, presets, adjust', () => {
+  assert.equal(sanitizeCrop(null), null);
+  assert.equal(sanitizeCrop([0, 0, 100]), null);
+  assert.deepEqual(sanitizeCrop([90, -5, 30]), [70, 0, 30]);
+  assert.deepEqual(sanitizeCrop([0, 0, 2]), [0, 0, 10]);
+  assert.deepEqual(cropPreset('br', 25), [75, 75, 25]);
+  assert.deepEqual(cropPreset('tl', 30), [0, 0, 30]);
+  assert.deepEqual(adjustCrop([10, 10, 30], { dx: 2, dy: -20 }), [12, 0, 30]);
+  assert.deepEqual(adjustCrop([10, 10, 30], { ds: 10 }), [5, 5, 40]);
+  assert.deepEqual(adjustCrop([0, 70, 30], { ds: -100 }), [10, 80, 10]);
+});
+
+test('cropBox zooms the region onto the tile', () => {
+  // bottom-left quarter-size cam on a 480x270 tile: player 4x bigger, shifted up
+  const b = cropBox(480, 270, [0, 75, 25]);
+  assert.deepEqual(b, { left: 0, top: -810, width: 1920, height: 1080 });
+  // non 16:9 tile still covered completely
+  const c = cropBox(400, 400, [40, 40, 20]);
+  assert.ok(c.width * 9 / 16 >= 400 && c.left <= 0 && c.top <= 0 && c.left + c.width >= 400 && c.top + c.height >= 400);
+  assert.equal(cropBox(480, 270, null), null);
+});
+
+test('crops travel in the link and are dropped with the channel', () => {
+  let st = sanitizeState({ channels: ['a', 'b'] });
+  st = setCrop(st, 'b', [70, 0, 30]);
+  const q = toQuery(st);
+  assert.equal(q, '?c=a,b&k=b.70.0.30');
+  assert.deepEqual(parseQuery(q).crops, { b: [70, 0, 30] });
+  assert.deepEqual(parseQuery('?c=a&k=a.1.2.x,zz.1.1.20').crops, {});
+  assert.deepEqual(removeChannel(st, 'b').crops, {});
+  assert.deepEqual(setCrop(st, 'b', null).crops, {});
 });

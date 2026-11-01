@@ -27,12 +27,32 @@ button:focus, input:focus { border-color: var(--focus); }
 .tile { position: absolute; overflow: hidden; background: #000; contain: size layout; }
 .tile.hidden-tile { visibility: hidden; pointer-events: none; }
 .tile .player, .tile .player iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
-/* Transparent cover so remote/mouse focus goes to the tile, not into the Twitch iframe */
-.tile .cover { position: absolute; inset: 0; z-index: 2; }
-.tile .label { position: absolute; left: 10px; bottom: 10px; z-index: 3; padding: 3px 10px; border-radius: 6px; background: rgba(0,0,0,.65); font-size: 15px; pointer-events: none; opacity: 0; transition: opacity .2s; }
-.tile:focus .label, .tile.audio .label, body.show-labels .label { opacity: 1; }
-.tile.audio .label::before { content: 'Ton: '; color: var(--focus); }
+/* Nothing lies on top of a player while it starts: Twitch does not autoplay covered players.
+   The small bar only appears on hover / focus. */
+.tile .wait { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 15px; text-align: center; padding: 8px; }
+.tile .bar { position: absolute; top: 8px; right: 8px; z-index: 3; display: none; gap: 4px; align-items: center; padding: 4px; border-radius: 8px; background: rgba(0,0,0,.75); font-size: 14px; }
+.tile .bar .label { padding: 0 6px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
+.tile.audio .bar .label::before { content: 'Ton: '; color: var(--focus); }
+.tile .bar button { padding: 3px 8px; font-size: 13px; border-width: 1px; border-radius: 6px; }
+.tile:hover .bar, .tile:focus .bar, .tile.active-frame .bar { display: flex; }
+.tile.stalled .bar { display: flex; }
 .tile.pip-small { z-index: 4; box-shadow: 0 0 0 2px rgba(0,0,0,.8); border-radius: 6px; }
+.tile.cropped .player { right: auto; bottom: auto; }
+
+/* Cam crop editor: the edited cam fills the screen, a frame marks the region to keep */
+.tile.editing { left: 0 !important; top: 0 !important; width: 100% !important; height: 100% !important; z-index: 15; visibility: visible; }
+.tile.editing .bar { display: none; }
+.crop-edit { position: fixed; inset: 0; z-index: 16; }
+.crop-layer { position: absolute; inset: 0; cursor: move; touch-action: none; }
+.crop-frame { position: absolute; border: 4px solid var(--focus); box-shadow: 0 0 0 9999px rgba(0,0,0,.55); border-radius: 4px; pointer-events: none; }
+.crop-bar { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); width: min(980px, calc(100vw - 24px)); padding: 12px; border-radius: 10px; background: rgba(24,24,27,.95); border: 1px solid var(--line); }
+.crop-help { font-size: 15px; color: var(--muted); margin-bottom: 8px; }
+.crop-help button { padding: 2px 8px; font-size: 15px; }
+.crop-bar .row button { padding: 6px 12px; font-size: 15px; }
+
+/* Fire TV app: page is laid out at 1920 px, so enlarge the controls */
+html.tv .menu, html.tv .open-menu, html.tv .welcome, html.tv .crop-bar, html.tv .tile .bar, html.tv .tile .wait { zoom: 2; }
+html.tv .tile:focus::after { border-width: 8px; }
 
 .welcome { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; color: var(--muted); padding: 24px; }
 
@@ -78,3 +98,10 @@ body.menu-open .open-menu { display: none; }
 .qrow { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-bottom: 8px; }
 .qlabel { width: 110px; color: var(--muted); font-size: 15px; }
 .qrow button { padding: 6px 12px; font-size: 15px; }
+
+/* Touch screens have no hover: show the bar and menu button all the time */
+@media (hover: none) and (pointer: coarse) {
+  .tile .bar { display: flex; }
+  body:not(.menu-open):not(.crop-editing) .open-menu { display: block; }
+}
+body.crop-editing .open-menu { display: none; }

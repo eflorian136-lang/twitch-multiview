@@ -20,7 +20,8 @@ window.Twitch = { Player: function (id, o) {
     setMuted(m) { this.muted = m; }, setVolume() {},
     addEventListener(n, cb) { this.ev[n] = cb; },
     getQualities() { return [{ name: 'Auto', group: 'auto' }, { name: '1080p60', group: 'chunked' }, { name: '480p', group: '480p30' }, { name: '160p', group: '160p30' }]; },
-    setQuality(q) { this.quality = q; }, pause() { this.paused = true; }, play() { this.paused = false; } };
+    setQuality(q) { this.quality = q; }, getQuality() { return this.quality; }, isPaused() { return this.paused; },
+    pause() { this.paused = true; }, play() { this.paused = false; } };
   window.__players[o.channel] = p;
   return p;
 } };
@@ -62,7 +63,12 @@ test('empty start opens menu, adding channels updates URL and players', { skip: 
   }
   assert.equal(await page.locator('.tile').count(), 3);
   assert.match(page.url(), /\?c=alpha,beta,gamma$/);
+  // players under the open menu are not started yet (Twitch does not autoplay covered players)
+  const started = await page.evaluate(() => Object.keys(window.__players));
+  assert.ok(!started.includes('alpha'), 'alpha is covered by the menu: ' + started);
+  await page.keyboard.press('Escape');
   assert.deepEqual(await muted(page), { alpha: false, beta: true, gamma: true });
+  await page.keyboard.press('m');
   const parent = await page.evaluate(() => window.__players.alpha.parent);
   assert.deepEqual(parent, ['localhost']);
 
@@ -152,6 +158,8 @@ test('stream finder: device login, pick main stream and add cams', { skip: !chro
   await page.click('#results li:has-text("TOPDE1") button:has-text("Als Cam dazu")');
   await page.click('#results li:has-text("TOPDE3") button:has-text("Als Cam dazu")');
   assert.match(page.url(), /c=topde2,topde1,topde3/);
+  await page.click('#closeMenu');
+  await page.keyboard.press('m');
   // main stream keeps sound
   assert.deepEqual(await muted(page), { topde2: false, topde1: true, topde3: true });
 
@@ -256,5 +264,95 @@ test('app in background pauses all streams, resumes when back', { skip: !chromiu
   assert.deepEqual(await paused(), { h1: true, h2: true });
   await page.evaluate(() => window.setAppHidden(false));
   assert.deepEqual(await paused(), { h1: false, h2: false });
+  assert.deepEqual(errors, []);
+});
+
+test('typing r or m into the channel field does not close the menu', { skip: !chromium && 'playwright missing' }, async () => {
+  const { page, errors } = await open();
+  await page.click('#channelInput');
+  await page.keyboard.type('marcrr');
+  assert.equal(await page.inputValue('#channelInput'), 'marcrr');
+  assert.ok(await page.evaluate(() => document.body.classList.contains('menu-open')));
+  assert.deepEqual(errors, []);
+});
+
+test('hidden streams stay paused even when the player becomes ready later', { skip: !chromium && 'playwright missing' }, async () => {
+  const { page, errors } = await open('?c=s1,s2,s3');
+  await page.keyboard.press('Enter'); // s1 already main -> single
+  await page.evaluate(() => {
+    for (const p of Object.values(window.__players)) { p.paused = false; p.ev.ready && p.ev.ready(); p.ev.playing && p.ev.playing(); }
+  });
+  const paused = await page.evaluate(() => Object.fromEntries(Object.entries(window.__players).map(([k, v]) => [k, v.paused])));
+  assert.deepEqual(paused, { s1: false, s2: true, s3: true });
+  // not visible at start = not started at all
+  const p2 = await open('?c=t1,t2&l=single');
+  assert.deepEqual(await p2.page.evaluate(() => Object.keys(window.__players)), ['t1']);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(p2.errors, []);
+});
+
+test('nothing covers a player: no overlay element on top of the stream', { skip: !chromium && 'playwright missing' }, async () => {
+  const { page, errors } = await open('?c=o1,o2&l=spotlight');
+  const covered = await page.evaluate(() => [...document.querySelectorAll('.tile')].map((t) => {
+    const r = t.querySelector('.player').getBoundingClientRect();
+    const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return t.querySelector('.player').contains(el);
+  }));
+  assert.deepEqual(covered, [true, true]);
+  assert.deepEqual(errors, []);
+});
+
+test('cam crop: side cam shows only the cam, main stream always whole', { skip: !chromium && 'playwright missing' }, async () => {
+  const { page, errors } = await open('?c=main1,cam1&l=spotlight');
+  await page.evaluate(() => Object.values(window.__players).forEach((p) => p.ev.playing && p.ev.playing()));
+  await page.keyboard.press('m');
+  await page.click('#list li[data-ch="cam1"] [data-act="crop"]');
+  assert.ok(await page.isVisible('#cropEdit'));
+  assert.ok(!(await page.evaluate(() => document.body.classList.contains('menu-open'))));
+  // editing shows the whole picture full screen
+  const full = await page.locator('.tile[data-channel="cam1"]').boundingBox();
+  assert.equal(Math.round(full.width), 1280);
+  await page.click('[data-corner="tr"]');
+  await page.click('#cropDone');
+  assert.match(page.url(), /k=cam1\.70\.0\.30/);
+  const tile = await page.locator('.tile[data-channel="cam1"]').boundingBox();
+  const pl = await page.locator('.tile[data-channel="cam1"] .player').boundingBox();
+  assert.ok(pl.width > tile.width * 3, 'player zoomed: ' + pl.width);
+  // center of the crop region (85% across, 15% down the picture) sits in the middle of the tile
+  assert.ok(Math.abs(pl.x + pl.width * 0.85 - (tile.x + tile.width / 2)) < 2, 'crop centered horizontally');
+  assert.ok(pl.y <= tile.y + 1, 'top aligned');
+  // cropped side cam gets a higher quality than "Minimal"
+  await page.evaluate(() => Object.values(window.__players).forEach((p) => p.ev.playing && p.ev.playing()));
+  assert.notEqual(await page.evaluate(() => window.__players.cam1.quality), '160p30');
+
+  // making the cam the main stream shows it whole
+  await page.keyboard.press('Escape');
+  await page.focus('.tile[data-channel="cam1"]');
+  await page.keyboard.press('Enter');
+  const mainBox = await page.locator('.tile[data-channel="cam1"] .player').boundingBox();
+  const mainTile = await page.locator('.tile[data-channel="cam1"]').boundingBox();
+  assert.ok(Math.abs(mainBox.width - mainTile.width) < 2);
+  // crop is remembered for this channel after remove + add
+  await page.keyboard.press('m');
+  await page.click('#list li[data-ch="cam1"] [data-act="remove"]');
+  await page.fill('#channelInput', 'cam1');
+  await page.press('#channelInput', 'Enter');
+  assert.match(page.url(), /k=cam1\.70\.0\.30/);
+  assert.deepEqual(errors, []);
+});
+
+test('crop editor works with the remote: arrows move, OK = size, Back = done', { skip: !chromium && 'playwright missing' }, async () => {
+  const { page, errors } = await open('?c=r1,r2');
+  await page.keyboard.press('m');
+  await page.click('#list li[data-ch="r2"] [data-act="crop"]');
+  await page.evaluate(() => document.activeElement.blur());
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowUp');
+  assert.match(page.url(), /k=r2\.2\.68\.30/);
+  await page.keyboard.press('Enter'); // size mode
+  await page.keyboard.press('ArrowUp');
+  assert.match(page.url(), /k=r2\.1\.67\.32/);
+  assert.equal(await page.evaluate(() => window.handleBack()), 'handled');
+  assert.ok(await page.isHidden('#cropEdit'));
   assert.deepEqual(errors, []);
 });

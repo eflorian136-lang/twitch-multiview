@@ -23,6 +23,7 @@ public class MainActivity extends Activity {
     private boolean showingError = false;
     private Updater updater;
     private long lastUpdateCheck = 0;
+    private boolean paused = false;
 
     private static final String ERROR_PAGE =
         "<html><body style='background:#0e0e10;color:#efeff1;font:28px sans-serif;display:flex;"
@@ -153,17 +154,24 @@ public class MainActivity extends Activity {
     protected void onPause() {
         super.onPause();
         // In the background: stop all streams, then freeze JS timers and rendering (saves CPU, network, heat)
-        web.evaluateJavascript("window.setAppHidden && window.setAppHidden(true)", r -> web.pauseTimers());
+        paused = true;
+        // only freeze if the app did not come back in the meantime (otherwise the page would stay frozen)
+        web.evaluateJavascript("window.setAppHidden && window.setAppHidden(true)", r -> {
+            if (paused) web.pauseTimers();
+        });
         web.onPause();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
+        paused = false;
         web.resumeTimers();
         web.onResume();
         web.evaluateJavascript("window.setAppHidden && window.setAppHidden(false)", null);
         hideSystemUi();
+        // back from the "install unknown apps" setting: continue a waiting update
+        if (updater.resumePending()) return;
         // check for a new app version at most every 6 hours
         long now = System.currentTimeMillis();
         if (now - lastUpdateCheck > 6 * 3600 * 1000L) {

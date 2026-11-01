@@ -55,15 +55,17 @@ export function createTwitch({ clientId, fetchFn = (...a) => fetch(...a), storag
   }
 
   async function api(path, params = {}) {
-    if (!auth) throw new Error('not logged in');
+    const expired = () => new Error('Anmeldung abgelaufen, bitte neu anmelden');
+    if (!auth) throw expired();
     if (auth.expiresAt && auth.expiresAt - now() < 60_000) await refresh();
+    if (!auth) throw expired(); // refresh failed and logged out
     const url = `${API}/${path}?${new URLSearchParams(params)}`;
     const call = () => fetchFn(url, { headers: { 'Client-Id': clientId, Authorization: `Bearer ${auth.accessToken}` } });
     let r = await call();
     if (r.status === 401 && (await refresh())) r = await call();
-    if (r.status === 401) {
+    if (r.status === 401 || !auth) {
       save(null);
-      throw new Error('Anmeldung abgelaufen');
+      throw expired();
     }
     if (!r.ok) throw new Error('Twitch API Fehler ' + r.status);
     return r.json();
@@ -121,6 +123,7 @@ export function createTwitch({ clientId, fetchFn = (...a) => fetch(...a), storag
     },
 
     async followedLive() {
+      if (!auth) throw new Error('Anmeldung abgelaufen, bitte neu anmelden');
       if (!auth.userId) await loadUser();
       const d = await api('streams/followed', { user_id: auth.userId, first: 50 });
       return d.data.map(mapStream);

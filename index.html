@@ -16,11 +16,19 @@
       <h1>MultiView</h1>
       <button id="closeMenu" class="nav">Schliessen</button>
     </div>
-    <form id="addForm" class="row">
-      <input id="channelInput" class="nav" placeholder="Twitch-Kanal oder Link" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <h2>Cam hinzufuegen</h2>
+    <form id="addForm" class="row add">
+      <input id="channelInput" class="nav" placeholder="Twitch-Link oder Name einfuegen" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="done" aria-describedby="preview">
       <button class="nav primary">Hinzufuegen</button>
+      <button id="pasteBtn" type="button" class="nav" hidden>Aus Zwischenablage</button>
     </form>
+    <p id="preview" class="hint">z.B. https://www.twitch.tv/name oder einfach name. Mehrere mit Komma oder Leerzeichen trennen.</p>
     <p id="msg" class="msg" aria-live="polite"></p>
+
+    <h2>Deine Cams <span id="camCount" class="count"></span></h2>
+    <ol id="list" class="list"></ol>
+    <p id="empty" class="hint">Noch keine Cams. Oben einen Twitch-Link einfuegen.</p>
+    <p class="hint" id="listHint" hidden>Hauptbild = hat Ton und ist bei Spotlight / Bild in Bild gross. Andere Cams laufen stumm (Qualitaet unten einstellbar).</p>
 
     <section id="finder" hidden>
       <h2>Live-Streams finden</h2>
@@ -56,9 +64,26 @@
       <button class="nav" data-layout="single">Nur einer</button>
     </div>
 
-    <h2>Kanaele</h2>
-    <ul id="list" class="list"></ul>
-    <p id="empty" class="hint">Noch keine Kanaele. Oben einen Twitch-Namen eingeben.</p>
+    <h2>Qualitaet</h2>
+    <div class="qrow"><span class="qlabel">Hauptbild</span>
+      <div id="qMain" class="row">
+        <button class="nav" data-qmain="auto">Auto</button>
+        <button class="nav" data-qmain="1080">1080p</button>
+        <button class="nav" data-qmain="720">720p</button>
+        <button class="nav" data-qmain="480">480p</button>
+        <button class="nav" data-qmain="min">Minimal</button>
+      </div>
+    </div>
+    <div class="qrow"><span class="qlabel">Neben-Cams</span>
+      <div id="qSide" class="row">
+        <button class="nav" data-qside="min">Minimal</button>
+        <button class="nav" data-qside="360">360p</button>
+        <button class="nav" data-qside="480">480p</button>
+        <button class="nav" data-qside="720">720p</button>
+        <button class="nav" data-qside="auto">Auto</button>
+      </div>
+    </div>
+    <p class="hint">Weniger Qualitaet = weniger Leistung und Datenverbrauch. Fire TV: Neben-Cams auf Minimal lassen. Gibt der Stream die Stufe nicht her, wird die naechst kleinere genommen. Gilt nur fuer dieses Geraet.</p>
 
     <h2>Link fuer Fire TV / Freunde</h2>
     <div class="row">

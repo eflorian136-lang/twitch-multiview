@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  normalizeChannel, sanitizeState, parseQuery, toQuery, addChannel, removeChannel, moveChannel,
+  normalizeChannel, parseChannelList, addChannels, lowestQuality, pickQuality, sanitizeState, parseQuery, toQuery, addChannel, removeChannel, moveChannel,
   layoutRects, spatialNext, MAX_CHANNELS,
 } from '../js/core.js';
 
@@ -13,12 +13,70 @@ test('normalizeChannel accepts names and URLs', () => {
   assert.equal(normalizeChannel('m.twitch.tv/abc_1'), 'abc_1');
 });
 
+test('normalizeChannel understands all kinds of Twitch links', () => {
+  assert.equal(normalizeChannel('https://www.twitch.tv/Papaplatte?sr=a'), 'papaplatte');
+  assert.equal(normalizeChannel('HTTPS://M.TWITCH.TV/abc/home'), 'abc');
+  assert.equal(normalizeChannel('http://twitch.tv/abc/'), 'abc');
+  assert.equal(normalizeChannel('https://player.twitch.tv/?channel=Foo&parent=x'), 'foo');
+  assert.equal(normalizeChannel('https://www.twitch.tv/popout/bar/chat?popout='), 'bar');
+  assert.equal(normalizeChannel('https://dashboard.twitch.tv/u/baz/stream-manager'), 'baz');
+  assert.equal(normalizeChannel('https://www.twitch.tv/moderator/modme'), 'modme');
+  assert.equal(normalizeChannel('<https://twitch.tv/abc>'), 'abc');
+  assert.equal(normalizeChannel('twitch.tv/abc#chat'), 'abc');
+  for (const bad of ['twitch.tv', 'https://www.twitch.tv/', 'twitch.tv/videos/123', 'https://clips.twitch.tv/Xyz', 'twitch.tv/directory/category/x', 'eviltwitch.tv/x', 'https://example.com/abc'])
+    assert.equal(normalizeChannel(bad), null, bad);
+});
+
+test('parseChannelList splits names and links', () => {
+  assert.deepEqual(parseChannelList('a, b\nc d;a'), { channels: ['a', 'b', 'c', 'd'], invalid: [] });
+  assert.deepEqual(parseChannelList('schau mal https://twitch.tv/x und twitch.tv/y'), { channels: ['x', 'y'], invalid: [] });
+  assert.deepEqual(parseChannelList('ok bad-name'), { channels: ['ok'], invalid: ['bad-name'] });
+  assert.deepEqual(parseChannelList('  '), { channels: [], invalid: [] });
+});
+
+test('addChannels adds all valid, reports the rest', () => {
+  let r = addChannels(sanitizeState({ channels: ['a'] }), 'b a x-y c');
+  assert.deepEqual(r.added, ['b', 'c']);
+  assert.deepEqual(r.state.channels, ['a', 'b', 'c']);
+  assert.equal(r.state.audio, 'a');
+  assert.match(r.errors.join('|'), /Kein Twitch-Kanal: x-y/);
+  assert.match(r.errors.join('|'), /a ist schon drin/);
+  r = addChannels(sanitizeState({}), Array.from({ length: 12 }, (_, i) => 'k' + i).join(' '));
+  assert.equal(r.added.length, MAX_CHANNELS);
+  assert.deepEqual(r.errors, [`Maximal ${MAX_CHANNELS} Kanaele`]);
+  assert.equal(addChannels(sanitizeState({}), '').errors.length, 1);
+});
+
+test('lowestQuality picks smallest real resolution', () => {
+  assert.equal(lowestQuality([{ group: 'auto' }, { group: 'chunked' }, { group: '720p60' }, { group: '360p30' }, { group: '160p30' }]), '160p30');
+  assert.equal(lowestQuality(['auto', '480p30', '720p30']), '480p30');
+  assert.equal(lowestQuality([{ group: 'auto' }]), null);
+  assert.equal(lowestQuality(undefined), null);
+});
+
+test('pickQuality honours presets with fallback', () => {
+  const qs = [{ name: 'Auto', group: 'auto' }, { name: '1080p60 (Quelle)', group: 'chunked' }, { name: '720p60', group: '720p60' },
+    { name: '480p', group: '480p30' }, { name: '160p', group: '160p30' }, { name: 'Audio', group: 'audio_only' }];
+  assert.equal(pickQuality(qs, 'auto'), 'auto');
+  assert.equal(pickQuality(qs, '1080'), 'chunked');
+  assert.equal(pickQuality(qs, '720'), '720p60');
+  assert.equal(pickQuality(qs, '360'), '160p30');
+  assert.equal(pickQuality(qs, 'min'), '160p30');
+  assert.equal(pickQuality([{ group: '720p30' }], '480'), '720p30'); // nothing below limit -> lowest there is
+  assert.equal(pickQuality([], '720'), null);
+});
+
+test('quality settings are sanitized', () => {
+  assert.deepEqual([sanitizeState({ qMain: '1080', qSide: '360' }).qMain, sanitizeState({ qSide: '360' }).qSide], ['1080', '360']);
+  assert.deepEqual([sanitizeState({ qMain: 'x' }).qMain, sanitizeState({ qSide: 99 }).qSide], ['auto', 'min']);
+});
+
 test('normalizeChannel rejects junk', () => {
   for (const bad of ['', '   ', 'a-b', '<script>', 'x'.repeat(26), 'two words', null, 42]) assert.equal(normalizeChannel(bad), null);
 });
 
 test('query roundtrip', () => {
-  const st = { channels: ['a', 'b', 'c'], layout: 'spotlight', audio: 'b' };
+  const st = { channels: ['a', 'b', 'c'], layout: 'spotlight', audio: 'b', qMain: 'auto', qSide: 'min' };
   const q = toQuery(st);
   assert.equal(q, '?c=a,b,c&l=spotlight&a=b');
   assert.deepEqual(parseQuery(q), st);
@@ -26,7 +84,7 @@ test('query roundtrip', () => {
 
 test('parseQuery defaults and sanitizes', () => {
   assert.equal(parseQuery(''), null);
-  assert.deepEqual(parseQuery('?c=A,a,bad-name,b&l=nope&a=zzz'), { channels: ['a', 'b'], layout: 'grid', audio: 'a' });
+  assert.deepEqual(parseQuery('?c=A,a,bad-name,b&l=nope&a=zzz'), { channels: ['a', 'b'], layout: 'grid', audio: 'a', qMain: 'auto', qSide: 'min' });
 });
 
 test('sanitizeState caps channel count', () => {
@@ -47,7 +105,7 @@ test('add / remove / move channels', () => {
   assert.deepEqual(st.channels, ['two', 'one']);
   assert.equal(moveChannel(st, 'two', -1), st);
   st = removeChannel(st, 'one');
-  assert.deepEqual(st, { channels: ['two'], layout: 'grid', audio: 'two' });
+  assert.deepEqual(st, { channels: ['two'], layout: 'grid', audio: 'two', qMain: 'auto', qSide: 'min' });
 });
 
 const inside = (r) => r.x >= -1e-9 && r.y >= -1e-9 && r.x + r.w <= 100 + 1e-9 && r.y + r.h <= 100 + 1e-9;

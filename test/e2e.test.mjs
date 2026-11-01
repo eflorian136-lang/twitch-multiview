@@ -16,12 +16,16 @@ window.__players = {};
 window.Twitch = { Player: function (id, o) {
   const el = document.getElementById(id);
   const f = document.createElement('div'); f.className = 'stub'; f.textContent = o.channel; el.appendChild(f);
-  const p = { channel: o.channel, muted: o.muted, parent: o.parent,
-    setMuted(m) { this.muted = m; }, setVolume() {} };
+  const p = { channel: o.channel, muted: o.muted, parent: o.parent, quality: null, paused: false, ev: {},
+    setMuted(m) { this.muted = m; }, setVolume() {},
+    addEventListener(n, cb) { this.ev[n] = cb; },
+    getQualities() { return [{ name: 'Auto', group: 'auto' }, { name: '1080p60', group: 'chunked' }, { name: '480p', group: '480p30' }, { name: '160p', group: '160p30' }]; },
+    setQuality(q) { this.quality = q; }, pause() { this.paused = true; }, play() { this.paused = false; } };
   window.__players[o.channel] = p;
   return p;
 } };
 window.Twitch.Player.READY = 'ready';
+window.Twitch.Player.PLAYING = 'playing';
 `;
 
 let server, browser, base;
@@ -62,9 +66,10 @@ test('empty start opens menu, adding channels updates URL and players', { skip: 
   const parent = await page.evaluate(() => window.__players.alpha.parent);
   assert.deepEqual(parent, ['localhost']);
 
-  await page.fill('#channelInput', 'not valid!');
+  await page.fill('#channelInput', 'not-valid!');
   await page.press('#channelInput', 'Enter');
-  assert.match(await page.textContent('#msg'), /Ungueltig/);
+  assert.match(await page.textContent('#msg'), /Kein Twitch-Kanal: not-valid!/);
+  assert.equal(await page.locator('.tile').count(), 3);
   assert.deepEqual(errors, []);
 });
 
@@ -106,7 +111,7 @@ test('layouts and persistence across reload', { skip: !chromium && 'playwright m
   const small = await page.locator('.tile[data-channel="x1"]').boundingBox();
   assert.ok(small.width < 400);
 
-  await page.click('#list li:first-child button:has-text("Weg")');
+  await page.click('#list li:first-child button:has-text("Entfernen")');
   assert.equal(await page.locator('.tile').count(), 2);
 
   await page.goto(base); // no query -> restore from localStorage
@@ -173,5 +178,74 @@ test('app bridge: update button only inside the Fire TV app', { skip: !chromium 
   assert.match(await page.textContent('#appVersion'), /7/);
   await page.click('#appUpdate');
   assert.equal(await page.evaluate(() => window.__checks), 1);
+  assert.deepEqual(errors, []);
+});
+
+test('paste several Twitch links at once, preview and clean cam list', { skip: !chromium && 'playwright missing' }, async () => {
+  const { page, errors } = await open();
+  await page.fill('#channelInput', 'https://m.twitch.tv/Eins?sr=a twitch.tv/popout/zwei/chat');
+  assert.match(await page.textContent('#preview'), /Erkannt: eins, zwei/);
+  await page.press('#channelInput', 'Enter');
+  assert.match(page.url(), /\?c=eins,zwei$/);
+  assert.equal(await page.inputValue('#channelInput'), '');
+  assert.match(await page.textContent('#msg'), /eins, zwei hinzugefuegt/);
+
+  // pasting a clean link into the empty field adds it immediately
+  await page.focus('#channelInput');
+  await page.evaluate(() => {
+    const dt = new DataTransfer();
+    dt.setData('text/plain', 'https://www.twitch.tv/drei/videos');
+    document.getElementById('channelInput').dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+  });
+  assert.match(page.url(), /\?c=eins,zwei,drei$/);
+  assert.equal(await page.textContent('#camCount'), '3 / 9');
+  assert.match(await page.textContent('#list li.main'), /eins/);
+
+  // list: first "Hoch" and last "Runter" are disabled; set main; focus stays in list after remove
+  assert.ok(await page.locator('#list li:nth-child(1) [data-act="up"]').isDisabled());
+  assert.ok(await page.locator('#list li:nth-child(3) [data-act="down"]').isDisabled());
+  await page.click('#list li:nth-child(3) [data-act="main"]');
+  assert.match(page.url(), /a=drei/);
+  await page.focus('#list li:nth-child(1) [data-act="remove"]');
+  await page.keyboard.press('Enter');
+  assert.match(page.url(), /\?c=zwei,drei/);
+  assert.equal(await page.evaluate(() => document.activeElement.closest('li') && document.activeElement.closest('li').dataset.ch), 'zwei');
+  assert.deepEqual(errors, []);
+});
+
+test('performance: side cams lowest quality, hidden streams paused', { skip: !chromium && 'playwright missing' }, async () => {
+  const { page, errors } = await open('?c=p1,p2,p3');
+  await page.evaluate(() => Object.values(window.__players).forEach((p) => p.ev.playing && p.ev.playing()));
+  const q = () => page.evaluate(() => Object.fromEntries(Object.entries(window.__players).map(([k, v]) => [k, [v.quality, v.paused]])));
+  assert.deepEqual(await q(), { p1: ['auto', false], p2: ['160p30', false], p3: ['160p30', false] });
+
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('Enter'); // p2 main
+  assert.deepEqual(await q(), { p1: ['160p30', false], p2: ['auto', false], p3: ['160p30', false] });
+
+  await page.keyboard.press('Enter'); // single -> others paused
+  assert.deepEqual(await q(), { p1: ['160p30', true], p2: ['auto', false], p3: ['160p30', true] });
+  await page.keyboard.press('Enter'); // back -> resumed
+  assert.deepEqual(await q(), { p1: ['160p30', false], p2: ['auto', false], p3: ['160p30', false] });
+  assert.deepEqual(errors, []);
+});
+
+test('quality can be chosen per main stream and side cams, kept on this device', { skip: !chromium && 'playwright missing' }, async () => {
+  const { page, errors } = await open('?c=q1,q2');
+  const fire = () => page.evaluate(() => Object.values(window.__players).forEach((p) => p.ev.playing && p.ev.playing()));
+  const q = () => page.evaluate(() => Object.fromEntries(Object.entries(window.__players).map(([k, v]) => [k, v.quality])));
+  await fire();
+  assert.deepEqual(await q(), { q1: 'auto', q2: '160p30' });
+  await page.keyboard.press('m');
+  await page.click('[data-qmain="1080"]');
+  await page.click('[data-qside="480"]');
+  assert.deepEqual(await q(), { q1: 'chunked', q2: '480p30' });
+  assert.ok(await page.locator('[data-qmain="1080"]').evaluate((b) => b.classList.contains('active')));
+  assert.doesNotMatch(page.url(), /qMain|qSide/);
+
+  // a shared link opened on this device keeps the device quality
+  await page.goto(base + '?c=q3');
+  await fire();
+  assert.deepEqual(await q(), { q3: 'chunked' });
   assert.deepEqual(errors, []);
 });

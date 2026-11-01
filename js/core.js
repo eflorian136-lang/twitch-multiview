@@ -3,13 +3,72 @@ export const LAYOUTS = ['grid', 'spotlight', 'pip', 'single'];
 export const MAX_CHANNELS = 9;
 const CHANNEL_RE = /^[a-z0-9_]{1,25}$/;
 
-// Accepts "name", "@name", "twitch.tv/name", "https://www.twitch.tv/name/..." -> "name" or null
+// First path segments on twitch.tv that are pages, not channels.
+const RESERVED = new Set([
+  'videos', 'video', 'directory', 'search', 'settings', 'p', 'downloads', 'jobs', 'turbo', 'subscriptions',
+  'inventory', 'wallet', 'friends', 'messages', 'drops', 'prime', 'store', 'login', 'signup', 'logout',
+  'following', 'collections', 'clip', 'clips', 'team', 'activate', 'products', 'bits', 'broadcast', 'help',
+]);
+const TWITCH_URL_RE = /^(?:https?:\/\/)?((?:[a-z0-9-]+\.)*twitch\.tv)(?=$|[/?#])(.*)$/i;
+
+function channelFromUrl(host, rest) {
+  const [beforeHash] = rest.split('#');
+  const qi = beforeHash.indexOf('?');
+  const path = qi < 0 ? beforeHash : beforeHash.slice(0, qi);
+  const params = new URLSearchParams(qi < 0 ? '' : beforeHash.slice(qi + 1));
+  const parts = path.split('/').filter(Boolean).map((x) => x.toLowerCase());
+  let cand = null;
+  if (host === 'player.twitch.tv' || host === 'embed.twitch.tv') cand = params.get('channel');
+  else if (host === 'dashboard.twitch.tv') cand = parts[0] === 'u' ? parts[1] : null;
+  else if (host === 'twitch.tv' || host === 'www.twitch.tv' || host === 'm.twitch.tv' || host === 'go.twitch.tv') {
+    if (['popout', 'moderator', 'embed'].includes(parts[0])) cand = parts[1];
+    else if (parts[0] && !RESERVED.has(parts[0])) cand = parts[0];
+  }
+  cand = cand ? cand.toLowerCase() : null;
+  return cand && CHANNEL_RE.test(cand) ? cand : null;
+}
+
+// Accepts "name", "@name", "twitch.tv/name", "https://www.twitch.tv/name/...", "m.twitch.tv/name?x=1",
+// popout/player/dashboard links -> "name" or null
 export function normalizeChannel(input) {
   if (typeof input !== 'string') return null;
-  let s = input.trim().toLowerCase();
-  s = s.replace(/^https?:\/\//, '').replace(/^(www\.|m\.)?twitch\.tv\//, '').replace(/^@/, '');
-  s = s.split(/[/?#]/)[0];
-  return CHANNEL_RE.test(s) ? s : null;
+  const s = input.trim();
+  if (!s) return null;
+  const m = s.replace(/^<(.*)>$/, '$1').match(TWITCH_URL_RE); // <link> as some chat apps copy it
+  if (m) return channelFromUrl(m[1].toLowerCase(), m[2]);
+  const n = s.toLowerCase().replace(/^@/, '');
+  return CHANNEL_RE.test(n) ? n : null;
+}
+
+// Splits pasted text into channels. If the text contains Twitch links, only the links count
+// (so "schau mal twitch.tv/abc" works). Otherwise every word / comma-separated entry is a name.
+export function parseChannelList(text) {
+  const channels = [];
+  const invalid = [];
+  if (typeof text !== 'string') return { channels, invalid };
+  const tokens = text.split(/[\s,;|]+/).filter(Boolean);
+  const hasLinks = tokens.some((t) => TWITCH_URL_RE.test(t.replace(/^<(.*)>$/, '$1')));
+  for (const t of tokens) {
+    const isLink = TWITCH_URL_RE.test(t.replace(/^<(.*)>$/, '$1'));
+    if (hasLinks && !isLink) continue;
+    const n = normalizeChannel(t);
+    if (!n) invalid.push(t);
+    else if (!channels.includes(n)) channels.push(n);
+  }
+  return { channels, invalid };
+}
+
+// Lowest real quality id (e.g. "160p30") from player.getQualities() (objects or strings), or null.
+export function lowestQuality(qualities) {
+  if (!Array.isArray(qualities)) return null;
+  let best = null, bestRes = Infinity;
+  for (const q of qualities) {
+    const name = typeof q === 'string' ? q : q && (q.group || q.name);
+    if (!name || name === 'auto' || name === 'chunked' || name === 'audio_only') continue;
+    const res = parseInt(String(name), 10);
+    if (Number.isFinite(res) && res < bestRes) { bestRes = res; best = name; }
+  }
+  return best;
 }
 
 export function defaultState() {
@@ -52,6 +111,22 @@ export function addChannel(st, input) {
   if (st.channels.length >= MAX_CHANNELS) return { state: st, error: `Maximal ${MAX_CHANNELS} Kanaele` };
   const channels = [...st.channels, n];
   return { state: { ...st, channels, audio: st.audio || n }, error: null };
+}
+
+// Adds every channel found in text. Returns added names and readable problems.
+export function addChannels(st, text) {
+  const { channels, invalid } = parseChannelList(text);
+  const added = [];
+  const errors = [];
+  if (!channels.length && !invalid.length) return { state: st, added, errors: ['Bitte Twitch-Link oder Kanalnamen eingeben'] };
+  if (invalid.length) errors.push('Kein Twitch-Kanal: ' + invalid.join(', '));
+  let next = st;
+  for (const c of channels) {
+    const r = addChannel(next, c);
+    if (r.error) { if (!errors.includes(r.error)) errors.push(r.error); }
+    else { next = r.state; added.push(c); }
+  }
+  return { state: next, added, errors };
 }
 
 export function removeChannel(st, name) {

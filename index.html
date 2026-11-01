@@ -16,11 +16,19 @@
       <h1>MultiView</h1>
       <button id="closeMenu" class="nav">Schliessen</button>
     </div>
-    <form id="addForm" class="row">
-      <input id="channelInput" class="nav" placeholder="Twitch-Kanal oder Link" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <h2>Cam hinzufuegen</h2>
+    <form id="addForm" class="row add">
+      <input id="channelInput" class="nav" placeholder="Twitch-Link oder Name einfuegen" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="done" aria-describedby="preview">
       <button class="nav primary">Hinzufuegen</button>
+      <button id="pasteBtn" type="button" class="nav" hidden>Aus Zwischenablage</button>
     </form>
+    <p id="preview" class="hint">z.B. https://www.twitch.tv/name oder einfach name. Mehrere mit Komma oder Leerzeichen trennen.</p>
     <p id="msg" class="msg" aria-live="polite"></p>
+
+    <h2>Deine Cams <span id="camCount" class="count"></span></h2>
+    <ol id="list" class="list"></ol>
+    <p id="empty" class="hint">Noch keine Cams. Oben einen Twitch-Link einfuegen.</p>
+    <p class="hint" id="listHint" hidden>Hauptbild = hat Ton und ist bei Spotlight / Bild in Bild gross. Andere Cams laufen stumm in niedriger Qualitaet.</p>
 
     <section id="finder" hidden>
       <h2>Live-Streams finden</h2>
@@ -55,10 +63,6 @@
       <button class="nav" data-layout="pip">Bild in Bild</button>
       <button class="nav" data-layout="single">Nur einer</button>
     </div>
-
-    <h2>Kanaele</h2>
-    <ul id="list" class="list"></ul>
-    <p id="empty" class="hint">Noch keine Kanaele. Oben einen Twitch-Namen eingeben.</p>
 
     <h2>Link fuer Fire TV / Freunde</h2>
     <div class="row">

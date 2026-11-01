@@ -1,5 +1,6 @@
 import {
-  LAYOUTS, sanitizeState, parseQuery, toQuery, addChannel, removeChannel, moveChannel, layoutRects, spatialNext,
+  LAYOUTS, MAX_CHANNELS, sanitizeState, parseQuery, toQuery, addChannel, addChannels, parseChannelList, removeChannel,
+  moveChannel, layoutRects, spatialNext, lowestQuality,
 } from './core.js';
 import { TWITCH_CLIENT_ID } from './config.js';
 import { createTwitch } from './twitch.js';
@@ -7,7 +8,7 @@ import { createTwitch } from './twitch.js';
 const $ = (id) => document.getElementById(id);
 const STORE_KEY = 'multiview.state';
 const stage = $('stage');
-const tiles = new Map(); // channel -> { el, player, playerEl, rect }
+const tiles = new Map(); // channel -> { el, player, playerEl, rect, quality, paused }
 
 // ---------- state ----------
 function loadState() {
@@ -39,6 +40,12 @@ function createPlayer(channel, container) {
     const player = new window.Twitch.Player(id, {
       channel, parent: [location.hostname], width: '100%', height: '100%', muted, autoplay: true,
     });
+    // Qualities are only known once the stream plays; then tune (low quality for side cams).
+    const onPlay = () => tunePlayer(channel);
+    try {
+      player.addEventListener(window.Twitch.Player.PLAYING || 'playing', onPlay);
+      player.addEventListener(window.Twitch.Player.READY || 'ready', onPlay);
+    } catch {}
     return player;
   }
   // Fallback if the embed script could not load: plain iframe (mute changes reload it)
@@ -48,6 +55,26 @@ function createPlayer(channel, container) {
   f.allow = 'autoplay; fullscreen';
   container.appendChild(f);
   return null;
+}
+
+// Saves CPU/bandwidth: only the main stream gets "auto" quality, side cams the lowest one,
+// streams that are not visible (layout "Nur einer") or a hidden page are paused.
+function tunePlayer(ch) {
+  const t = tiles.get(ch);
+  if (!t || !t.player) return;
+  const p = t.player;
+  try {
+    if (!t.rect || document.hidden) {
+      if (!t.paused) { p.pause(); t.paused = true; }
+      return;
+    }
+    if (t.paused) { p.play(); t.paused = false; }
+    const want = ch === state.audio && state.channels.length > 0 ? 'auto' : lowestQuality(p.getQualities && p.getQualities());
+    if (want && t.quality !== want) {
+      p.setQuality(want);
+      t.quality = want;
+    }
+  } catch {}
 }
 
 function applyAudio() {
@@ -60,8 +87,13 @@ function applyAudio() {
         if (on) t.player.setVolume(1);
       } catch {}
     }
+    tunePlayer(ch);
   }
 }
+
+document.addEventListener('visibilitychange', () => {
+  for (const ch of tiles.keys()) tunePlayer(ch);
+});
 
 // ---------- render ----------
 function makeTile(channel) {
@@ -113,7 +145,7 @@ function render() {
   if (!channels.length && !welcome) {
     welcome = document.createElement('div');
     welcome.className = 'welcome';
-    welcome.textContent = 'Fuege im Menue Twitch-Kanaele hinzu.';
+    welcome.textContent = 'Menue oeffnen und einen Twitch-Link einfuegen.';
     stage.appendChild(welcome);
   } else if (channels.length && welcome) welcome.remove();
 
@@ -123,28 +155,60 @@ function render() {
 function renderMenu() {
   document.querySelectorAll('#layouts [data-layout]').forEach((b) => b.classList.toggle('active', b.dataset.layout === state.layout));
   const list = $('list');
+  // Remember which list button had focus so the remote does not lose its place after re-render.
+  const act = document.activeElement;
+  const prev = act && list.contains(act) ? { ch: act.closest('li').dataset.ch, act: act.dataset.act, idx: [...list.children].indexOf(act.closest('li')) } : null;
   list.replaceChildren();
-  $('empty').hidden = state.channels.length > 0;
-  for (const ch of state.channels) {
+  const n = state.channels.length;
+  $('empty').hidden = n > 0;
+  $('listHint').hidden = n < 2;
+  $('camCount').textContent = n ? `${n} / ${MAX_CHANNELS}` : '';
+  state.channels.forEach((ch, i) => {
+    const main = ch === state.audio;
     const li = document.createElement('li');
+    li.dataset.ch = ch;
+    li.classList.toggle('main', main);
+    const num = document.createElement('span');
+    num.className = 'num';
+    num.textContent = i + 1;
     const name = document.createElement('span');
     name.className = 'name';
     name.textContent = ch;
-    const mk = (text, fn, cls = '') => {
+    if (main) {
+      const tag = document.createElement('small');
+      tag.textContent = 'Hauptbild';
+      name.appendChild(tag);
+    }
+    const mk = (text, actName, fn, { cls = '', disabled = false, label } = {}) => {
       const b = document.createElement('button');
       b.className = 'nav ' + cls;
       b.textContent = text;
+      b.dataset.act = actName;
+      b.disabled = disabled;
+      if (label) b.setAttribute('aria-label', label);
       b.onclick = fn;
       return b;
     };
-    li.append(
-      name,
-      mk(ch === state.audio ? 'Ton an' : 'Ton', () => selectAudio(ch), ch === state.audio ? 'active' : ''),
-      mk('Hoch', () => setState(moveChannel(state, ch, -1))),
-      mk('Runter', () => setState(moveChannel(state, ch, 1))),
-      mk('Weg', () => setState(removeChannel(state, ch))),
+    const acts = document.createElement('div');
+    acts.className = 'acts';
+    acts.append(
+      mk(main ? 'Hauptbild' : 'Als Hauptbild', 'main', () => selectAudio(ch), { cls: main ? 'active' : '', label: `${ch} als Hauptbild` }),
+      mk('Hoch', 'up', () => setState(moveChannel(state, ch, -1)), { disabled: i === 0, label: `${ch} nach oben` }),
+      mk('Runter', 'down', () => setState(moveChannel(state, ch, 1)), { disabled: i === n - 1, label: `${ch} nach unten` }),
+      mk('Entfernen', 'remove', () => {
+        setState(removeChannel(state, ch));
+        msg(`${ch} entfernt`, true);
+      }, { cls: 'danger', label: `${ch} entfernen` }),
     );
+    li.append(num, name, acts);
     list.appendChild(li);
+  });
+  if (prev) {
+    const items = [...list.children];
+    const li = items.find((x) => x.dataset.ch === prev.ch) || items[Math.min(prev.idx, items.length - 1)];
+    let target = li && li.querySelector(`[data-act="${prev.act}"]:not(:disabled)`);
+    if (!target && li) target = li.querySelector('button:not(:disabled)');
+    (target || $('channelInput')).focus();
   }
   $('shareLink').value = location.origin + location.pathname + toQuery(state);
 }
@@ -170,15 +234,65 @@ function msg(text, ok = false) {
   m.classList.toggle('ok', ok);
 }
 
+function addFromText(text) {
+  const { state: next, added, errors } = addChannels(state, text);
+  const parts = [];
+  if (added.length) parts.push(`${added.join(', ')} hinzugefuegt`);
+  parts.push(...errors);
+  msg(parts.join('. '), added.length > 0 && !errors.length);
+  if (added.length) {
+    $('channelInput').value = '';
+    updatePreview();
+    setState(next);
+  }
+  return added.length > 0;
+}
+
+const PREVIEW_DEFAULT = $('preview').textContent;
+function updatePreview() {
+  const v = $('channelInput').value;
+  const p = $('preview');
+  if (!v.trim()) {
+    p.textContent = PREVIEW_DEFAULT;
+    p.className = 'hint';
+    return;
+  }
+  const { channels, invalid } = parseChannelList(v);
+  const t = [];
+  if (channels.length) t.push('Erkannt: ' + channels.join(', '));
+  if (invalid.length) t.push('Nicht erkannt: ' + invalid.join(', '));
+  p.textContent = t.join(' | ');
+  p.className = 'hint ' + (invalid.length || !channels.length ? 'bad' : 'good');
+}
+
 $('addForm').addEventListener('submit', (e) => {
   e.preventDefault();
-  const input = $('channelInput');
-  const { state: next, error } = addChannel(state, input.value);
-  if (error) return msg(error);
-  input.value = '';
-  msg(`${next.channels[next.channels.length - 1]} hinzugefuegt`, true);
-  setState(next);
+  addFromText($('channelInput').value);
 });
+$('channelInput').addEventListener('input', updatePreview);
+// Pasting a clean link into the empty field adds it right away.
+$('channelInput').addEventListener('paste', (e) => {
+  const text = e.clipboardData && e.clipboardData.getData('text');
+  if (!text || $('channelInput').value.trim()) return;
+  const { channels, invalid } = parseChannelList(text);
+  if (channels.length && !invalid.length) {
+    e.preventDefault();
+    addFromText(text);
+  }
+});
+if (navigator.clipboard && navigator.clipboard.readText && window.isSecureContext) {
+  $('pasteBtn').hidden = false;
+  $('pasteBtn').addEventListener('click', async () => {
+    let text = '';
+    try { text = await navigator.clipboard.readText(); } catch {
+      return msg('Zwischenablage nicht lesbar. Link ins Feld einfuegen.');
+    }
+    if (!addFromText(text)) {
+      $('channelInput').value = text.trim();
+      updatePreview();
+    }
+  });
+}
 
 document.querySelectorAll('#layouts [data-layout]').forEach((b) => {
   b.addEventListener('click', () => LAYOUTS.includes(b.dataset.layout) && setState({ ...state, layout: b.dataset.layout }));
@@ -220,7 +334,7 @@ const DIRS = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 
 const isMenuKey = (e) => e.key === 'ContextMenu' || e.key === 'Menu' || e.keyCode === 82 || e.keyCode === 93;
 
 function navInMenu(dir) {
-  const els = [...document.querySelectorAll('.menu .nav')].filter((el) => el.offsetParent !== null);
+  const els = [...document.querySelectorAll('.menu .nav')].filter((el) => el.offsetParent !== null && !el.disabled);
   const rects = els.map((el) => {
     const r = el.getBoundingClientRect();
     return { x: r.left, y: r.top, w: r.width, h: r.height };

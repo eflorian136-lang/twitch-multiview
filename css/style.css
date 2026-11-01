@@ -43,10 +43,20 @@ body.menu-open .menu { transform: none; }
 .msg { min-height: 1.4em; margin: 8px 0 0; color: #ff8080; }
 .msg.ok { color: #7ee787; }
 .hint { color: var(--muted); font-size: 15px; margin: 8px 0 0; }
+.hint.good { color: #7ee787; }
+.hint.bad { color: #ff8080; }
+h2 .count { color: var(--text); text-transform: none; letter-spacing: 0; margin-left: 6px; }
+.add input { flex: 1 1 220px; }
+button:disabled { opacity: .35; cursor: default; }
+button.danger:focus, button.danger:hover { background: #a1262b; border-color: #a1262b; }
 .list { list-style: none; margin: 0; padding: 0; }
-.list li { display: flex; gap: 6px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); }
-.list li:first-child { border-top: 0; }
-.list .name { flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.list li { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; padding: 8px 10px; margin-bottom: 6px; border: 2px solid var(--line); border-radius: 8px; background: #1f1f23; }
+.list li.main { border-color: var(--accent); }
+.list .num { width: 28px; height: 28px; flex: none; display: grid; place-items: center; border-radius: 50%; background: #2f2f35; font-size: 14px; font-weight: 700; }
+.list li.main .num { background: var(--accent); }
+.list .name { flex: 1 1 120px; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list .name small { margin-left: 8px; font-size: 12px; font-weight: 700; color: var(--focus); text-transform: uppercase; letter-spacing: .05em; }
+.list .acts { display: flex; flex-wrap: wrap; gap: 6px; }
 .list button { padding: 6px 12px; font-size: 15px; }
 
 .open-menu { position: fixed; top: 12px; left: 12px; z-index: 10; display: none; }

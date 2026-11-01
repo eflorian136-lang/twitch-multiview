@@ -376,3 +376,14 @@ test('paused streams are started by the page; main falls back to muted, a key pr
   assert.equal(await page.locator('.tile.needs-sound').count(), 0);
   assert.deepEqual(errors, []);
 });
+
+test('diagnose box in the menu lists every stream with its player state', { skip: !chromium && 'playwright missing' }, async () => {
+  const { page, errors } = await open('?c=d1,d2');
+  await page.evaluate(() => window.__players.d1.ev.playing && window.__players.d1.ev.playing());
+  await page.keyboard.press('m');
+  const txt = await page.textContent('#diag');
+  assert.match(txt, /Geraet: /);
+  assert.match(txt, /d1: \d+x\d+ pausiert=false/);
+  assert.match(txt, /d2: /);
+  assert.deepEqual(errors, []);
+});

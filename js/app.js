@@ -75,7 +75,15 @@ function startPlayer(ch, t) {
     }
     if (t.player) {
       const P = window.Twitch.Player;
-      const on = (name, fn) => { try { t.player.addEventListener(name, fn); } catch {} };
+      // one listener per event name, several handlers behind it
+      const handlers = {};
+      const on = (name, fn) => {
+        if (!handlers[name]) {
+          handlers[name] = [];
+          try { t.player.addEventListener(name, (...a) => handlers[name].forEach((f) => f(...a))); } catch {}
+        }
+        handlers[name].push(fn);
+      };
       on(P.READY || 'ready', () => {
         t.audioOn = undefined; // re-apply mute/volume now that the player listens
         applyAudioTile(ch, t);
@@ -91,6 +99,19 @@ function startPlayer(ch, t) {
         }
         tunePlayer(ch);
       });
+      // Diagnose: remember what the Twitch player reports (shown in the menu)
+      t.log = [];
+      const note = (name) => {
+        const sec = ((Date.now() - t.startedAt) / 1000).toFixed(1);
+        t.log.push(`${sec}s ${name}`);
+        if (t.log.length > 12) t.log.shift();
+      };
+      t.startedAt = Date.now();
+      for (const key of ['READY', 'PLAY', 'PLAYING', 'PAUSE', 'ENDED', 'ONLINE', 'OFFLINE', 'PLAYBACK_BLOCKED']) {
+        if (P[key]) on(P[key], () => note(key.toLowerCase()));
+      }
+      // autoplay with sound refused: start muted, the next key press / click brings the sound back
+      if (P.PLAYBACK_BLOCKED) on(P.PLAYBACK_BLOCKED, () => kickPlayer(ch, t, 2));
       // If it does not start (offline, autoplay blocked), show the crop anyway after a while.
       setTimeout(() => {
         if (!t.cropReady && tiles.get(ch) === t) {
@@ -531,6 +552,7 @@ function openMenu() {
   const first = state.channels.length ? document.querySelector('#layouts .active') : $('channelInput');
   (first || $('channelInput')).focus();
   updateDelayInfo();
+  updateDiag();
 }
 function closeMenu() {
   document.body.classList.remove('menu-open');
@@ -692,6 +714,22 @@ function latencies() {
 
 const spreadOf = (l) => (l.length < 2 ? 0 : Math.max(...l.map((x) => x.lat)) - Math.min(...l.map((x) => x.lat)));
 
+function updateDiag() {
+  const lines = [`Geraet: ${navigator.userAgent}`, `Fenster: ${innerWidth}x${innerHeight}, sichtbar: ${!document.hidden && !appHidden}`];
+  for (const [ch, t] of tiles) {
+    const r = t.el.getBoundingClientRect();
+    let st = 'nicht gestartet';
+    if (t.player) {
+      let paused = '?', muted = '?';
+      try { paused = t.player.isPaused(); } catch {}
+      try { muted = t.player.getMuted(); } catch {}
+      st = `pausiert=${paused} stumm=${muted} spielt=${!!t.playing}`;
+    } else if (t.iframe) st = 'einfacher Player (Twitch-Skript fehlt)';
+    lines.push(`${ch}: ${Math.round(r.width)}x${Math.round(r.height)} ${st} | ${(t.log || []).join(', ')}`);
+  }
+  $('diag').textContent = lines.join('\n');
+}
+
 function updateDelayInfo(extra = '') {
   const l = latencies();
   const txt = l.length
@@ -748,7 +786,10 @@ $('autoSync').addEventListener('click', () => {
   updateDelayInfo();
 });
 setInterval(() => {
-  if (menuOpen()) updateDelayInfo();
+  if (menuOpen()) {
+    updateDelayInfo();
+    updateDiag();
+  }
   if (autoSync && !syncUnsupported && !document.hidden && !appHidden && !cropEdit) syncDelays(false).catch(() => {});
 }, 20000);
 

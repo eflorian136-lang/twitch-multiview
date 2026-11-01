@@ -356,3 +356,23 @@ test('crop editor works with the remote: arrows move, OK = size, Back = done', {
   assert.ok(await page.isHidden('#cropEdit'));
   assert.deepEqual(errors, []);
 });
+
+test('paused streams are started by the page; main falls back to muted, a key press brings sound back', { skip: !chromium && 'playwright missing' }, async () => {
+  const { page, errors } = await open('?c=k1,k2');
+  // simulate blocked autoplay: players stay paused, and the main stream refuses to play with sound
+  await page.evaluate(() => {
+    for (const p of Object.values(window.__players)) {
+      p.paused = true;
+      p.play = function () { if (!this.muted && this.channel === 'k1') return; this.paused = false; };
+    }
+  });
+  await page.waitForFunction(() => !window.__players.k2.paused, null, { timeout: 3000 });
+  assert.equal(await page.evaluate(() => window.__players.k1.paused), true);
+  await page.waitForFunction(() => !window.__players.k1.paused, null, { timeout: 6000 });
+  assert.equal(await page.evaluate(() => window.__players.k1.muted), true, 'main started muted');
+  assert.ok(await page.locator('.tile[data-channel="k1"].needs-sound').count());
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await page.evaluate(() => window.__players.k1.muted), false, 'sound back after key press');
+  assert.equal(await page.locator('.tile.needs-sound').count(), 0);
+  assert.deepEqual(errors, []);
+});

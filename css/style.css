@@ -35,7 +35,10 @@ button:focus, input:focus { border-color: var(--focus); }
 .tile.audio .bar .label::before { content: 'Ton: '; color: var(--focus); }
 .tile .bar button { padding: 3px 8px; font-size: 13px; border-width: 1px; border-radius: 6px; }
 .tile:hover .bar, .tile:focus .bar, .tile.active-frame .bar { display: flex; }
-.tile.stalled .bar { display: flex; }
+.tile.stalled .bar, .tile.needs-sound .bar { display: flex; }
+.tile.stalled .bar .label::after { content: ' - startet nicht: OK / Klick'; color: #ff8080; font-weight: 400; }
+.tile.needs-sound .bar .label::after { content: ' - stumm: Taste / Klick fuer Ton'; color: var(--focus); font-weight: 400; }
+.tile.stalled .bar .label, .tile.needs-sound .bar .label { max-width: none; }
 .tile.pip-small { z-index: 4; box-shadow: 0 0 0 2px rgba(0,0,0,.8); border-radius: 6px; }
 .tile.cropped .player { right: auto; bottom: auto; }
 

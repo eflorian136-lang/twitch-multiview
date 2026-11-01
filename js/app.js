@@ -7,7 +7,7 @@ import { createTwitch } from './twitch.js';
 
 const $ = (id) => document.getElementById(id);
 const STORE_KEY = 'multiview.state';
-const SYNC_KEY = 'multiview.autosync';
+const SYNC_KEY = 'multiview.autosync2'; // auto delay sync is off unless switched on
 const stage = $('stage');
 // channel -> { el, playerEl, player, iframe, rect, started, playing, quality, pausedByUs, audioOn, cropReady }
 const tiles = new Map();
@@ -80,6 +80,7 @@ function startPlayer(ch, t) {
         t.audioOn = undefined; // re-apply mute/volume now that the player listens
         applyAudioTile(ch, t);
         tunePlayer(ch);
+        kickPlayer(ch, t, 0);
       });
       on(P.PLAYING || 'playing', () => {
         t.playing = true;
@@ -98,6 +99,8 @@ function startPlayer(ch, t) {
         }
         if (!t.playing && tiles.get(ch) === t) t.el.classList.add('stalled');
       }, 8000);
+      // Twitch does not always autoplay (browser rules, its own checks): start it ourselves.
+      for (const [i, ms] of [1500, 4000, 8000, 15000].entries()) setTimeout(() => kickPlayer(ch, t, i + 1), ms);
       return;
     }
   }
@@ -109,6 +112,46 @@ function startPlayer(ch, t) {
   t.cropReady = true;
   layoutTile(ch);
 }
+
+const shouldRun = (t) => !!t.rect && !document.hidden && !appHidden && !t.held;
+const playerPaused = (t) => {
+  try { return typeof t.player.isPaused === 'function' ? t.player.isPaused() : !t.playing; } catch { return false; }
+};
+
+// Starts a stream that stays paused. If the browser blocks sound without a click, the main stream
+// starts muted; the next key press / click anywhere turns the sound back on.
+function kickPlayer(ch, t, attempt) {
+  if (tiles.get(ch) !== t || !t.player || !shouldRun(t) || !playerPaused(t)) return;
+  try {
+    if (attempt >= 2 && ch === state.audio && !t.autoMuted) {
+      t.player.setMuted(true);
+      t.autoMuted = true;
+      t.el.classList.add('needs-sound');
+    }
+    t.player.play();
+  } catch {}
+}
+
+// A real key press or click allows sound and playback: resume everything that should run.
+function onUserGesture() {
+  for (const [ch, t] of tiles) {
+    if (!t.player || !t.started) continue;
+    try {
+      if (t.autoMuted && ch === state.audio) {
+        t.player.setMuted(false);
+        t.autoMuted = false;
+        t.el.classList.remove('needs-sound');
+      }
+      if (shouldRun(t) && playerPaused(t)) {
+        t.player.play();
+        t.resumedAt = Date.now();
+      }
+    } catch {}
+  }
+}
+document.addEventListener('keydown', onUserGesture, true);
+document.addEventListener('pointerdown', onUserGesture, true);
+window.addEventListener('blur', onUserGesture); // click into a player iframe
 
 function iframeSrc(ch, muted) {
   const q = new URLSearchParams({ channel: ch, parent: location.hostname, muted: String(muted), autoplay: 'true' });
@@ -151,8 +194,8 @@ function tunePlayer(ch) {
       if (need > limit) preset = String(need);
     }
     const want = pickQuality(p.getQualities && p.getQualities(), preset);
-    const cur = typeof p.getQuality === 'function' ? p.getQuality() : t.quality;
-    if (want && (cur !== want || t.quality !== want)) {
+    // only set when our wish changed: setting the quality again makes the player re-buffer
+    if (want && t.quality !== want) {
       p.setQuality(want);
       t.quality = want;
     }
@@ -164,6 +207,8 @@ function applyAudioTile(ch, t) {
   t.el.classList.toggle('audio', on);
   if (t.audioOn === on) return;
   t.audioOn = on;
+  t.autoMuted = false;
+  t.el.classList.remove('needs-sound');
   if (t.player) {
     try {
       t.player.setMuted(!on);
@@ -628,7 +673,7 @@ cropLayer.addEventListener('wheel', (e) => {
 // Every stream has its own delay (mostly set by the streamer's setup). Streams that are ahead are
 // held back briefly so all run as late as the slowest one. Works only where the Twitch player
 // reports its delay.
-let autoSync = (() => { try { return localStorage.getItem(SYNC_KEY) !== '0'; } catch { return true; } })();
+let autoSync = (() => { try { return localStorage.getItem(SYNC_KEY) === '1'; } catch { return false; } })();
 let syncing = false;
 let syncUnsupported = false;
 
@@ -677,8 +722,12 @@ async function syncDelays(manual) {
     const hold = target - x.lat;
     if (hold < 0.5) continue;
     longest = Math.max(longest, hold);
+    x.t.held = true;
     try { x.t.player.pause(); } catch {}
-    setTimeout(() => { try { if (!x.t.pausedByUs) x.t.player.play(); } catch {} }, hold * 1000);
+    setTimeout(() => {
+      x.t.held = false;
+      try { if (!x.t.pausedByUs) x.t.player.play(); } catch {}
+    }, hold * 1000);
   }
   await new Promise((r) => setTimeout(r, longest * 1000 + 5000));
   syncing = false;
@@ -799,6 +848,8 @@ document.addEventListener('keydown', (e) => {
     const ch = document.activeElement && document.activeElement.dataset.channel;
     if (ch) {
       e.preventDefault();
+      const t = tiles.get(ch);
+      if (t && t.resumedAt && Date.now() - t.resumedAt < 300) return; // this OK just started the paused stream
       if (state.audio === ch) toggleSingle(ch);
       else selectAudio(ch);
     }

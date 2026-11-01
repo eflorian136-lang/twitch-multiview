@@ -5,10 +5,34 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MultiView</title>
 <meta name="description" content="Mehrere Twitch-Streams gleichzeitig ansehen - auch auf dem Fire TV Stick.">
+<script>
+  // Fire TV app: lay out at full HD so every stream is big enough for Twitch (min. 400x300 px to start)
+  if (window.MultiViewApp) {
+    document.documentElement.classList.add('tv');
+    document.querySelector('meta[name=viewport]').setAttribute('content', 'width=1920');
+  }
+</script>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 <div id="stage" class="stage" aria-label="Streams"></div>
+
+<div id="cropEdit" class="crop-edit" hidden>
+  <div id="cropLayer" class="crop-layer"><div id="cropFrame" class="crop-frame"></div></div>
+  <div class="crop-bar">
+    <div class="crop-help">Rahmen auf die Kamera setzen. Pfeile = <button id="cropMode" type="button" class="nav">Verschieben</button> (OK wechselt zu Groesse). Maus: ziehen, Mausrad = Groesse.</div>
+    <div class="row">
+      <button type="button" class="nav" data-corner="tl">Oben links</button>
+      <button type="button" class="nav" data-corner="tr">Oben rechts</button>
+      <button type="button" class="nav" data-corner="bl">Unten links</button>
+      <button type="button" class="nav" data-corner="br">Unten rechts</button>
+      <button type="button" class="nav" id="cropSmaller">Kleiner</button>
+      <button type="button" class="nav" id="cropBigger">Groesser</button>
+      <button type="button" class="nav" id="cropWhole">Ganzes Bild</button>
+      <button type="button" class="nav primary" id="cropDone">Fertig</button>
+    </div>
+  </div>
+</div>
 
 <div id="menu" class="menu" role="dialog" aria-label="Menue">
   <div class="menu-inner">
@@ -28,7 +52,7 @@
     <h2>Deine Cams <span id="camCount" class="count"></span></h2>
     <ol id="list" class="list"></ol>
     <p id="empty" class="hint">Noch keine Cams. Oben einen Twitch-Link einfuegen.</p>
-    <p class="hint" id="listHint" hidden>Hauptbild = hat Ton und ist bei Spotlight / Bild in Bild gross. Andere Cams laufen stumm (Qualitaet unten einstellbar).</p>
+    <p class="hint" id="listHint" hidden>Hauptbild = hat Ton, wird immer ganz gezeigt und ist bei Spotlight / Bild in Bild gross. Andere Cams laufen stumm. "Nur Cam" = von diesem Stream nur die Kamera des Streamers zeigen (Ausschnitt wird pro Kanal gemerkt).</p>
 
     <section id="finder" hidden>
       <h2>Live-Streams finden</h2>
@@ -85,6 +109,14 @@
     </div>
     <p class="hint">Weniger Qualitaet = weniger Leistung und Datenverbrauch. Fire TV: Neben-Cams auf Minimal lassen. Gibt der Stream die Stufe nicht her, wird die naechst kleinere genommen. Gilt nur fuer dieses Geraet.</p>
 
+    <h2>Verzoegerung angleichen</h2>
+    <div class="row">
+      <button id="syncNow" class="nav">Jetzt angleichen</button>
+      <button id="autoSync" class="nav">Automatisch: an</button>
+    </div>
+    <p id="delayInfo" class="hint"></p>
+    <p class="hint">Streams, die voraus sind, werden kurz angehalten, bis alle gleich spaet laufen. Die Verzoegerung beim Streamer selbst (seine Einstellung bei Twitch) bleibt bestehen.</p>
+
     <h2>Link fuer Fire TV / Freunde</h2>
     <div class="row">
       <input id="shareLink" class="nav" readonly>
@@ -95,7 +127,7 @@
       <button id="appUpdate" class="nav">App-Update suchen</button>
       <span id="appVersion" class="hint"></span>
     </div>
-    <p class="hint keys">Fernbedienung: Pfeile = Stream waehlen, OK = Ton auf diesen Stream, nochmal OK = Vollbild, Menue-Taste oder Pfeil hoch am oberen Rand = dieses Menue.</p>
+    <p class="hint keys">Fernbedienung: Pfeile = Stream waehlen, OK = Ton auf diesen Stream, nochmal OK = Vollbild, Menue-Taste oder Pfeil hoch am oberen Rand = dieses Menue. Startet ein Stream nicht: Stream anklicken (Maus/Touch) oder Menue schliessen.</p>
   </div>
 </div>
 

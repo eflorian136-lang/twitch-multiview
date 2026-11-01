@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
     paths: ['android/**', '.github/workflows/android.yml']
+  pull_request:
+    paths: ['android/**', '.github/workflows/android.yml']
   workflow_dispatch:
 
 permissions:
@@ -60,6 +62,7 @@ jobs:
           path: MultiView.apk
 
       - name: Als Download veroeffentlichen
+        if: github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: tv-app

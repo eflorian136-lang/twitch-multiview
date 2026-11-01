@@ -29,6 +29,7 @@ public class Updater {
     private final Activity activity;
     private final Handler main = new Handler(Looper.getMainLooper());
     private boolean busy = false;
+    private String pendingApkUrl = null; // waiting for the "install unknown apps" permission
 
     public Updater(Activity activity) {
         this.activity = activity;
@@ -67,9 +68,20 @@ public class Updater {
             .show();
     }
 
+    /** Called on resume: continues an update once the install permission was given. */
+    public boolean resumePending() {
+        if (pendingApkUrl == null || busy) return false;
+        if (Build.VERSION.SDK_INT >= 26 && !activity.getPackageManager().canRequestPackageInstalls()) return false;
+        String url = pendingApkUrl;
+        pendingApkUrl = null;
+        downloadAndInstall(url);
+        return true;
+    }
+
     private void downloadAndInstall(final String apkUrl) {
         if (Build.VERSION.SDK_INT >= 26 && !activity.getPackageManager().canRequestPackageInstalls()) {
-            toast("Bitte MultiView erlauben, Apps zu installieren, dann erneut versuchen");
+            pendingApkUrl = apkUrl;
+            toast("Bitte MultiView erlauben, Apps zu installieren");
             try {
                 activity.startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                     Uri.parse("package:" + activity.getPackageName())));
@@ -82,15 +94,14 @@ public class Updater {
         busy = true;
         new Thread(() -> {
             try {
-                File dir = new File(activity.getCacheDir(), ApkProvider.DIR);
-                dir.mkdirs();
-                File apk = new File(dir, ApkProvider.FILE);
+                final File apk = apkFile();
+                apk.getParentFile().mkdirs();
                 try (OutputStream out = new FileOutputStream(apk)) {
                     out.write(download(apkUrl));
                 }
                 main.post(() -> {
                     busy = false;
-                    install();
+                    install(apk);
                 });
             } catch (Exception e) {
                 main.post(() -> {
@@ -101,8 +112,22 @@ public class Updater {
         }).start();
     }
 
-    private void install() {
-        Uri uri = Uri.parse("content://" + activity.getPackageName() + ".apk/" + ApkProvider.FILE);
+    /**
+     * Android 7+: private cache, handed over via ApkProvider (content://).
+     * Android 5/6 (Fire OS 5): the installer there only accepts file:// URIs, so the APK goes
+     * to the app's external cache folder, which the installer can read.
+     */
+    private File apkFile() {
+        File base = null;
+        if (Build.VERSION.SDK_INT < 24) base = activity.getExternalCacheDir();
+        if (base == null) base = activity.getCacheDir();
+        return new File(new File(base, ApkProvider.DIR), ApkProvider.FILE);
+    }
+
+    private void install(File apk) {
+        Uri uri = Build.VERSION.SDK_INT < 24 && !apk.getAbsolutePath().startsWith(activity.getCacheDir().getAbsolutePath())
+            ? Uri.fromFile(apk)
+            : Uri.parse("content://" + activity.getPackageName() + ".apk/" + ApkProvider.FILE);
         Intent i = new Intent(Intent.ACTION_INSTALL_PACKAGE);
         i.setDataAndType(uri, "application/vnd.android.package-archive");
         i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);

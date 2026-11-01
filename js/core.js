@@ -97,7 +97,68 @@ export function pickQuality(qualities, preset) {
 }
 
 export function defaultState() {
-  return { channels: [], layout: 'grid', audio: null, qMain: DEFAULT_Q_MAIN, qSide: DEFAULT_Q_SIDE };
+  return { channels: [], layout: 'grid', audio: null, qMain: DEFAULT_Q_MAIN, qSide: DEFAULT_Q_SIDE, crops: {} };
+}
+
+// ---------- cam crop ("nur die Kamera zeigen") ----------
+// A crop is [x, y, s] in percent of the stream picture: left/top edge and size of the region.
+// The region has the picture's own aspect (16:9), so a size of 25 = a quarter of width and height.
+export const CROP_MIN = 10;
+export const CROP_STEP = 2;
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+export function sanitizeCrop(c) {
+  if (!Array.isArray(c) || c.length !== 3) return null;
+  const n = c.map((v) => Math.round(Number(v)));
+  if (n.some((v) => !Number.isFinite(v))) return null;
+  const s = clamp(n[2], CROP_MIN, 100);
+  if (s >= 100) return null; // whole picture = no crop
+  return [clamp(n[0], 0, 100 - s), clamp(n[1], 0, 100 - s), s];
+}
+
+// corner: 'tl' | 'tr' | 'bl' | 'br' | 'c'
+export function cropPreset(corner, s = 30) {
+  const far = 100 - s;
+  const pos = { tl: [0, 0], tr: [far, 0], bl: [0, far], br: [far, far], c: [far / 2, far / 2] }[corner] || [0, 0];
+  return sanitizeCrop([pos[0], pos[1], s]);
+}
+
+// Moves (dx, dy) or resizes (ds, around the center) a crop and keeps it inside the picture.
+export function adjustCrop(c, { dx = 0, dy = 0, ds = 0 } = {}) {
+  const [x, y, s] = c || [35, 35, 30];
+  const ns = clamp(s + ds, CROP_MIN, 100);
+  return sanitizeCrop([x + dx - (ns - s) / 2, y + dy - (ns - s) / 2, ns]);
+}
+
+// Size/position (px) of the 16:9 player inside a tile of tileW x tileH so that the crop region
+// covers the tile (centered, never showing anything outside the picture).
+export function cropBox(tileW, tileH, crop) {
+  const c = sanitizeCrop(crop);
+  if (!c || tileW <= 0 || tileH <= 0) return null;
+  const [x, y, s] = c.map((v) => v / 100);
+  const width = Math.max(tileW / s, ((tileH / s) * 16) / 9);
+  const height = (width * 9) / 16;
+  const left = clamp(tileW / 2 - (x + s / 2) * width, tileW - width, 0);
+  const top = clamp(tileH / 2 - (y + s / 2) * height, tileH - height, 0);
+  return { left, top, width, height };
+}
+
+function sanitizeCrops(raw, channels) {
+  const out = {};
+  if (!raw || typeof raw !== 'object') return out;
+  for (const ch of channels) {
+    const c = sanitizeCrop(raw[ch]);
+    if (c) out[ch] = c;
+  }
+  return out;
+}
+
+export function setCrop(st, ch, crop) {
+  const crops = { ...st.crops };
+  const c = sanitizeCrop(crop);
+  if (c) crops[ch] = c;
+  else delete crops[ch];
+  return { ...st, crops };
 }
 
 export function sanitizeState(raw) {
@@ -112,14 +173,21 @@ export function sanitizeState(raw) {
   st.audio = st.channels.includes(raw.audio) ? raw.audio : st.channels[0] || null;
   st.qMain = QUALITIES.includes(raw.qMain) ? raw.qMain : DEFAULT_Q_MAIN;
   st.qSide = QUALITIES.includes(raw.qSide) ? raw.qSide : DEFAULT_Q_SIDE;
+  st.crops = sanitizeCrops(raw.crops, st.channels);
   return st;
 }
 
-// URL format: ?c=chan1,chan2&l=grid&a=chan1
+// URL format: ?c=chan1,chan2&l=grid&a=chan1&k=chan2.70.0.30 (k = cam crops: name.x.y.size)
 export function parseQuery(search) {
   const p = new URLSearchParams(search);
-  if (!p.has('c')) return null;
-  return sanitizeState({ channels: (p.get('c') || '').split(','), layout: p.get('l'), audio: p.get('a') });
+  const channels = (p.get('c') || '').split(',').filter(Boolean);
+  if (!channels.length) return null;
+  const crops = {};
+  for (const part of (p.get('k') || '').split(',')) {
+    const [ch, ...nums] = part.split('.');
+    if (ch) crops[ch.toLowerCase()] = nums;
+  }
+  return sanitizeState({ channels, layout: p.get('l'), audio: p.get('a'), crops });
 }
 
 export function toQuery(st) {
@@ -128,6 +196,8 @@ export function toQuery(st) {
   p.set('c', st.channels.join(','));
   if (st.layout !== 'grid') p.set('l', st.layout);
   if (st.audio && st.audio !== st.channels[0]) p.set('a', st.audio);
+  const k = st.channels.filter((c) => st.crops && st.crops[c]).map((c) => [c, ...st.crops[c]].join('.'));
+  if (k.length) p.set('k', k.join(','));
   return '?' + p.toString().replace(/%2C/g, ',');
 }
 
@@ -159,7 +229,9 @@ export function addChannels(st, text) {
 export function removeChannel(st, name) {
   const channels = st.channels.filter((c) => c !== name);
   const audio = st.audio === name ? channels[0] || null : st.audio;
-  return { ...st, channels, audio };
+  const crops = { ...st.crops };
+  delete crops[name];
+  return { ...st, channels, audio, crops };
 }
 
 export function moveChannel(st, name, delta) {
@@ -184,17 +256,30 @@ export function layoutRects(layout, n, mainIdx = 0) {
 
   if (layout === 'spotlight') {
     const rects = new Array(n);
-    rects[mainIdx] = { x: 0, y: 0, w: 75, h: 100 };
-    const h = 100 / (n - 1);
-    let k = 0;
-    for (let i = 0; i < n; i++) if (i !== mainIdx) rects[i] = { x: 75, y: k++ * h, w: 25, h };
+    const sides = [];
+    for (let i = 0; i < n; i++) if (i !== mainIdx) sides.push(i);
+    if (sides.length <= 3) {
+      // main left, cams in one column on the right
+      rects[mainIdx] = { x: 0, y: 0, w: 75, h: 100 };
+      const h = 100 / sides.length;
+      sides.forEach((i, k) => { rects[i] = { x: 75, y: k * h, w: 25, h }; });
+      return rects;
+    }
+    // 4+ cams: main top left (2/3), 3 cams in the right column, the rest in a row below
+    // (keeps cams big enough for Twitch, which needs at least 400x300 px to start a stream)
+    const t = 100 / 3;
+    rects[mainIdx] = { x: 0, y: 0, w: 2 * t, h: 2 * t };
+    sides.slice(0, 3).forEach((i, k) => { rects[i] = { x: 2 * t, y: k * t, w: t, h: t }; });
+    const rest = sides.slice(3);
+    const w = (2 * t) / rest.length;
+    rest.forEach((i, k) => { rects[i] = { x: k * w, y: 2 * t, w, h: t }; });
     return rects;
   }
 
   if (layout === 'pip') {
     const rects = new Array(n);
     rects[mainIdx] = full;
-    const w = 24, h = 24, gap = 1.5;
+    const w = 25, h = 28, gap = 1.5; // 480x302 px on a 1920x1080 screen (Twitch minimum 400x300)
     let k = 0;
     for (let i = 0; i < n; i++) {
       if (i === mainIdx) continue;

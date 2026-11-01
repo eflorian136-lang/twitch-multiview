@@ -92,3 +92,12 @@ test('search maps channels', async () => {
   const list = await createTwitch({ clientId: 'c', fetchFn, storage }).search('x');
   assert.equal(list[0].login, 'x');
 });
+
+test('expired token with failed refresh gives a clear message instead of a crash', async () => {
+  const storage = mem();
+  storage.setItem('multiview.twitch', JSON.stringify({ accessToken: 'old', refreshToken: 'rt', userId: '1', expiresAt: 1 }));
+  const { fetchFn } = fakeTwitch([[/oauth2\/token$/, () => res(400, {})], [/helix/, () => res(200, { data: [] })]]);
+  const tw = createTwitch({ clientId: 'c', fetchFn, storage, now: () => 10_000 });
+  await assert.rejects(tw.topLive(), /Anmeldung abgelaufen/);
+  assert.equal(tw.loggedIn, false);
+});

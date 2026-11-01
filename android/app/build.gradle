@@ -4,6 +4,7 @@ plugins {
 
 // Website the app shows. Override with -PstartUrl=https://... when building.
 def startUrl = project.findProperty('startUrl') ?: 'https://eflorian136-lang.github.io/twitch-multiview/'
+def updateUrl = project.findProperty('updateUrl') ?: 'https://github.com/eflorian136-lang/twitch-multiview/releases/download/tv-app/version.json'
 def ks = System.getenv('KEYSTORE_FILE')
 
 android {
@@ -17,6 +18,7 @@ android {
         versionCode((System.getenv('VERSION_CODE') ?: '1') as int)
         versionName '1.0.' + (System.getenv('VERSION_CODE') ?: '1')
         buildConfigField 'String', 'START_URL', "\"${startUrl}\""
+        buildConfigField 'String', 'UPDATE_URL', "\"${updateUrl}\""
     }
 
     buildFeatures { buildConfig true }
@@ -25,6 +27,7 @@ android {
         release {
             if (ks) {
                 storeFile file(ks)
+                storeType 'pkcs12'
                 storePassword System.getenv('KEYSTORE_PASSWORD')
                 keyAlias System.getenv('KEY_ALIAS')
                 keyPassword System.getenv('KEY_PASSWORD')

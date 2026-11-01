@@ -435,6 +435,13 @@ if (twitch.enabled) {
 }
 renderFinder();
 
+// ---------- Fire TV app bridge ----------
+if (window.MultiViewApp) {
+  $('appBox').hidden = false;
+  try { $('appVersion').textContent = 'App-Version ' + window.MultiViewApp.version(); } catch {}
+  $('appUpdate').addEventListener('click', () => window.MultiViewApp.checkUpdate());
+}
+
 // ---------- start ----------
 history.replaceState(null, '', location.pathname + toQuery(state));
 render();

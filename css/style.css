@@ -8,6 +8,7 @@
   --focus: #ffd400;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 18px/1.4 system-ui, sans-serif; overflow: hidden; }
 h1 { margin: 0; font-size: 26px; }
 h2 { margin: 22px 0 8px; font-size: 15px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }

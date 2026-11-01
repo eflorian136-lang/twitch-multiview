@@ -27,22 +27,32 @@ jobs:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
           if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
-            echo "KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.p12"
+            echo "KEYSTORE_FILE=$RUNNER_TEMP/release.p12" >> "$GITHUB_ENV"
+            echo "SIGNED=1" >> "$GITHUB_ENV"
           else
-            echo "::warning::Kein KEYSTORE_BASE64 Secret: APK wird mit Debug-Schluessel signiert (Updates brauchen dann Deinstallation)."
+            echo "::warning::Kein KEYSTORE_BASE64 Secret: APK wird mit Debug-Schluessel signiert, Auto-Update ist aus."
           fi
 
       - name: APK bauen
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: multiview
           VERSION_CODE: ${{ github.run_number }}
         run: |
           gradle -p android assembleRelease \
             -PstartUrl="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
           cp android/app/build/outputs/apk/release/app-release.apk MultiView.apk
+          files="MultiView.apk"
+          # version.json tells installed apps that an update exists (only for stable-signed builds)
+          if [ "$SIGNED" = "1" ]; then
+            printf '{"versionCode": %s, "apk": "https://github.com/%s/releases/download/tv-app/MultiView.apk"}\n' \
+              "$VERSION_CODE" "${{ github.repository }}" > version.json
+            files="$files
+          version.json"
+          fi
+          { echo "RELEASE_FILES<<EOF"; echo "$files"; echo "EOF"; } >> "$GITHUB_ENV"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -58,5 +68,5 @@ jobs:
             Fire-TV-App (Build ${{ github.run_number }}).
             Download-Link fuer die Downloader-App:
             https://github.com/${{ github.repository }}/releases/download/tv-app/MultiView.apk
-          files: MultiView.apk
+          files: ${{ env.RELEASE_FILES }}
           make_latest: true

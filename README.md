@@ -31,8 +31,10 @@ Mehrere Twitch-Streams gleichzeitig ansehen: einen beliebigen Live-Stream als Ha
 4. Installieren. "MultiView" erscheint unter "Deine Apps".
 
 Die APK wird bei jeder Aenderung in `android/` automatisch von GitHub Actions gebaut.
-Damit Updates ohne Deinstallation gehen, als Repository-Secrets einen festen Schluessel hinterlegen:
-`KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`.
+Automatische Updates: Die App prueft beim Start, ob es eine neue Version gibt, und bietet die Installation an (Android fragt einmal zur Bestaetigung).
+Dafuer muss jede Version mit demselben Schluessel signiert sein. Als Repository-Secrets hinterlegen:
+`KEYSTORE_BASE64` (PKCS12-Datei, base64, Alias `multiview`) und `KEYSTORE_PASSWORD`.
+Ohne diese Secrets wird mit Debug-Schluessel gebaut und das Auto-Update ist aus.
 
 ## Live-Stream-Suche aktivieren (Twitch Client-ID)
 

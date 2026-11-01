@@ -163,3 +163,15 @@ test('stream finder: device login, pick main stream and add cams', { skip: !chro
   assert.ok(tag, 'focus moved within finder');
   assert.deepEqual(errors, []);
 });
+
+test('app bridge: update button only inside the Fire TV app', { skip: !chromium && 'playwright missing' }, async () => {
+  const { page, errors } = await open('?c=a1');
+  assert.equal(await page.locator('#appBox').isHidden(), true);
+  await page.addInitScript(() => { window.__checks = 0; window.MultiViewApp = { version: () => 7, checkUpdate: () => window.__checks++ }; });
+  await page.reload();
+  await page.keyboard.press('m');
+  assert.match(await page.textContent('#appVersion'), /7/);
+  await page.click('#appUpdate');
+  assert.equal(await page.evaluate(() => window.__checks), 1);
+  assert.deepEqual(errors, []);
+});

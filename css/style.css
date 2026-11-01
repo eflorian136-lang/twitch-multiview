@@ -108,3 +108,4 @@ body.menu-open .open-menu { display: none; }
   body:not(.menu-open):not(.crop-editing) .open-menu { display: block; }
 }
 body.crop-editing .open-menu { display: none; }
+.diag { white-space: pre-wrap; word-break: break-all; font: 12px/1.4 ui-monospace, monospace; color: var(--muted); background: #111114; border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin: 0; max-height: 240px; overflow: auto; }

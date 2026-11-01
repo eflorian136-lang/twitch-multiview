@@ -7,6 +7,7 @@ import android.os.Bundle;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.WindowManager;
+import android.webkit.CookieManager;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -53,6 +54,16 @@ public class MainActivity extends Activity {
         s.setSaveFormData(false);
         s.setSupportZoom(false);
         s.setBuiltInZoomControls(false);
+        // Twitch treats the default WebView user agent ("Android ... wv ... Mobile") as a phone,
+        // where streams only start after a tap inside the player, which a remote cannot do.
+        // Present the same Chrome engine as a desktop browser instead.
+        s.setUserAgentString(desktopUserAgent(s.getUserAgentString()));
+
+        // The Twitch player runs in an iframe from twitch.tv (third party to github.io). WebView
+        // blocks its cookies by default, then the player cannot get its stream token.
+        CookieManager cookies = CookieManager.getInstance();
+        cookies.setAcceptCookie(true);
+        if (android.os.Build.VERSION.SDK_INT >= 21) cookies.setAcceptThirdPartyCookies(web, true);
 
         web.setWebChromeClient(new WebChromeClient());
         web.setWebViewClient(new WebViewClient() {
@@ -77,6 +88,14 @@ public class MainActivity extends Activity {
 
         updater = new Updater(this);
         web.addJavascriptInterface(new Bridge(), "MultiViewApp");
+    }
+
+    static String desktopUserAgent(String ua) {
+        String chrome = "120.0.0.0";
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("Chrome/([0-9.]+)").matcher(ua == null ? "" : ua);
+        if (m.find()) chrome = m.group(1);
+        return "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" + chrome
+            + " Safari/537.36 MultiViewTV";
     }
 
     /** Exposed to the website: window.MultiViewApp.checkUpdate() / .version() */

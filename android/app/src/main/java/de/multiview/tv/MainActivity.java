@@ -199,6 +199,16 @@ public class MainActivity extends Activity {
         }
     }
 
+    // Fire TV Stick 4K has 1.5 GB RAM: when Android asks to free memory, the page drops every player
+    // that is not on screen, before Android kills the WebView renderer (black screen / app restart).
+    @Override
+    public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        if (web != null && level >= TRIM_MEMORY_RUNNING_LOW && level != TRIM_MEMORY_UI_HIDDEN) {
+            web.evaluateJavascript("window.lowMemory && window.lowMemory()", null);
+        }
+    }
+
     @Override
     protected void onDestroy() {
         web.destroy();

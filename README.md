@@ -11,6 +11,7 @@ Mehrere Twitch-Streams gleichzeitig ansehen: einen beliebigen Live-Stream als Ha
 - Qualitaet einstellbar, getrennt fuer Hauptbild (Auto, 1080p, 720p, 480p, Minimal) und Neben-Cams (Minimal bis Auto), gespeichert pro Geraet
 - Spart Leistung: Neben-Cams standardmaessig stumm in niedrigster Qualitaet, unsichtbare Streams werden pausiert, im Hintergrund (App verlassen) laeuft gar nichts mehr
 - Fire TV: Streams starten nacheinander (Hauptbild zuerst), bei mehreren Streams hoechstens 720p30 (ab 4 Streams 480p30) statt 1080p60, Cam-Ausschnitte max. 480p
+- Ausgelegt auf den Fire TV Stick 4K (1. Gen, S3L46N): hoechstens 4 Streams laufen gleichzeitig (Hauptbild + 3 Cams), weitere Cams warten, OK auf der Kachel holt sie dazu. Streams, die laenger als 1 Minute nicht zu sehen sind, werden entladen; bei Speichermangel sofort
 - Live-Streams finden (nach Twitch-Anmeldung): gefolgte Kanaele, Top DE, Top weltweit, Suche
 - "Hauptbild" setzt einen Stream gross und mit Ton, "Als Cam dazu" fuegt ihn klein dazu
 - Layouts: Raster, Spotlight, Bild in Bild, Nur einer

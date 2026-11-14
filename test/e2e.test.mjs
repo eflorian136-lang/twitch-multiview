@@ -417,3 +417,33 @@ test('Fire TV: from 4 streams on the main stream gets at most 480p, cam crops at
   assert.deepEqual(q, { g1: '480p30', g2: '480p30', g3: '160p30', g4: '160p30' });
   assert.deepEqual(errors, []);
 });
+
+test('Fire TV: at most 4 streams play, OK on a waiting cam swaps it in, off-screen players are unloaded', { skip: !chromium && 'playwright missing' }, async () => {
+  const { page, errors } = await open();
+  await page.addInitScript(() => {
+    window.MultiViewApp = { version: () => 7, checkUpdate() {} };
+    window.__mvStaggerMs = 50;
+    window.__mvUnloadMs = 300;
+  });
+  await page.goto(base + '?c=h1,h2,h3,h4,h5,h6');
+  await page.waitForFunction(() => Object.keys(window.__players).length === 4, null, { timeout: 5000 });
+  await page.waitForTimeout(300);
+  assert.deepEqual(await page.evaluate(() => Object.keys(window.__players)), ['h1', 'h2', 'h3', 'h4']);
+  assert.match(await page.textContent('.tile[data-channel="h6"] .wait'), /hoechstens 4 Streams/);
+  // OK on h6: it becomes the main stream, the last cam in the list (h4) makes room
+  await page.focus('.tile[data-channel="h6"]');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => window.__players.h6, null, { timeout: 3000 });
+  assert.equal(await page.locator('.tile[data-channel="h4"] iframe, .tile[data-channel="h4"] .stub').count(), 0);
+  assert.match(await page.textContent('.tile[data-channel="h4"] .wait'), /hoechstens 4 Streams/);
+  // only h6 on screen: the others are unloaded after a while
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => document.querySelectorAll('.stub').length === 1, null, { timeout: 3000 });
+  // back to the grid: they come back one after another
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => document.querySelectorAll('.stub').length === 4, null, { timeout: 3000 });
+  // low-memory signal from the app drops what is not on screen
+  await page.evaluate(() => window.lowMemory());
+  assert.equal(await page.locator('.stub').count(), 4);
+  assert.deepEqual(errors, []);
+});

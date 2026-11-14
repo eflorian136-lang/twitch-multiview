@@ -59,11 +59,19 @@ let playerSeq = 0;
 // Fire TV (app or Silk browser): weak CPU, few hardware video decoders. Several 1080p60 streams at
 // once make everything stutter, so there the page saves harder (see tunePlayer / startVisiblePlayers).
 const lowPower = !!window.MultiViewApp || /\bAFT|Silk\/|MultiViewTV/.test(navigator.userAgent);
-const STAGGER_MS = 2500; // Fire TV: start one player at a time, loading several at once freezes the stick
+const STAGGER_MS = window.__mvStaggerMs ?? 2500; // Fire TV: start one player at a time, loading several at once freezes the stick
+// Target device: Fire TV Stick 4K, 1st gen (S3L46N: 4x 1.7 GHz, 1.5 GB RAM). Every Twitch player is a
+// whole web page with its own video decoder and ~100 MB of memory. More than 4 at once make it stutter,
+// so only 4 streams play there; the others wait until they are picked (OK on the tile).
+const MAX_LIVE = lowPower ? 4 : Infinity;
+// Fire TV: a stream that is not on screen (other layout) is unloaded after this time to free memory.
+const UNLOAD_HIDDEN_MS = window.__mvUnloadMs ?? 60000;
 const isTwitchApi = () => !!(window.Twitch && window.Twitch.Player);
 
 function startPlayer(ch, t) {
   t.started = true;
+  const gen = t.gen = (t.gen || 0) + 1; // timers / events of an unloaded player must not touch the tile
+  const current = () => tiles.get(ch) === t && t.gen === gen;
   t.playerEl.replaceChildren();
   const muted = ch !== state.audio;
   t.audioOn = !muted;
@@ -89,12 +97,14 @@ function startPlayer(ch, t) {
         handlers[name].push(fn);
       };
       on(P.READY || 'ready', () => {
+        if (!current()) return;
         t.audioOn = undefined; // re-apply mute/volume now that the player listens
         applyAudioTile(ch, t);
         tunePlayer(ch);
         kickPlayer(ch, t, 0);
       });
       on(P.PLAYING || 'playing', () => {
+        if (!current()) return;
         t.playing = true;
         t.el.classList.remove('stalled');
         if (!t.cropReady) {
@@ -115,17 +125,18 @@ function startPlayer(ch, t) {
         if (P[key]) on(P[key], () => note(key.toLowerCase()));
       }
       // autoplay with sound refused: start muted, the next key press / click brings the sound back
-      if (P.PLAYBACK_BLOCKED) on(P.PLAYBACK_BLOCKED, () => kickPlayer(ch, t, 2));
+      if (P.PLAYBACK_BLOCKED) on(P.PLAYBACK_BLOCKED, () => current() && kickPlayer(ch, t, 2));
       // If it does not start (offline, autoplay blocked), show the crop anyway after a while.
       setTimeout(() => {
-        if (!t.cropReady && tiles.get(ch) === t) {
+        if (!current()) return;
+        if (!t.cropReady) {
           t.cropReady = true;
           layoutTile(ch);
         }
-        if (!t.playing && tiles.get(ch) === t) t.el.classList.add('stalled');
+        if (!t.playing) t.el.classList.add('stalled');
       }, 8000);
       // Twitch does not always autoplay (browser rules, its own checks): start it ourselves.
-      for (const [i, ms] of [1500, 4000, 8000, 15000].entries()) setTimeout(() => kickPlayer(ch, t, i + 1), ms);
+      for (const [i, ms] of [1500, 4000, 8000, 15000].entries()) setTimeout(() => current() && kickPlayer(ch, t, i + 1), ms);
       return;
     }
   }
@@ -137,6 +148,67 @@ function startPlayer(ch, t) {
   t.cropReady = true;
   layoutTile(ch);
 }
+
+// Removes a player completely (frees its decoder and memory); the tile shows a note instead.
+function unloadPlayer(ch, t) {
+  if (!t.started) return;
+  try { if (t.player) t.player.pause(); } catch {}
+  t.gen = (t.gen || 0) + 1;
+  Object.assign(t, {
+    started: false, player: null, iframe: null, playing: false, quality: undefined, pausedByUs: false,
+    cropReady: false, audioOn: undefined, autoMuted: false, volumeSet: false, log: [],
+  });
+  t.el.classList.remove('stalled', 'needs-sound');
+  t.playerEl.replaceChildren(waitEl());
+  layoutTile(ch);
+}
+
+// Channels allowed to play: main stream first, then the cams in list order, at most MAX_LIVE.
+function liveSet() {
+  const order = [state.audio, ...state.channels.filter((c) => c !== state.audio)];
+  return new Set(order.filter((c) => tiles.get(c) && tiles.get(c).rect).slice(0, MAX_LIVE));
+}
+
+const WAIT_TEXT = 'Startet, sobald das Menue zu ist';
+const BUDGET_TEXT = `Fire TV: hoechstens ${MAX_LIVE} Streams gleichzeitig. OK = diesen zeigen`;
+function waitEl(text = WAIT_TEXT) {
+  const w = document.createElement('div');
+  w.className = 'wait';
+  w.textContent = text;
+  return w;
+}
+
+// Fire TV: stop players over the limit, unload streams that have been off screen for a while.
+function enforceBudget() {
+  if (!lowPower) return;
+  const live = liveSet();
+  for (const [ch, t] of tiles) {
+    const over = !!t.rect && !live.has(ch);
+    t.el.classList.toggle('over-budget', over);
+    if (over) unloadPlayer(ch, t);
+    if (!t.started) {
+      const w = t.playerEl.querySelector('.wait');
+      const text = over ? BUDGET_TEXT : WAIT_TEXT;
+      if (w && w.textContent !== text) w.textContent = text;
+    }
+    if (t.rect) {
+      clearTimeout(t.unloadTimer);
+      t.unloadTimer = null;
+    } else if (t.started && !t.unloadTimer) {
+      t.unloadTimer = setTimeout(() => {
+        t.unloadTimer = null;
+        if (tiles.get(ch) === t && !t.rect) unloadPlayer(ch, t);
+      }, UNLOAD_HIDDEN_MS);
+    }
+  }
+}
+
+// The Fire TV app calls this when Android runs low on memory: drop everything not on screen now.
+window.lowMemory = () => {
+  for (const [ch, t] of tiles) {
+    if (!t.rect || (lowPower && !liveSet().has(ch))) unloadPlayer(ch, t);
+  }
+};
 
 const shouldRun = (t) => !!t.rect && !document.hidden && !appHidden && !t.held;
 const playerPaused = (t) => {
@@ -197,7 +269,8 @@ function startVisiblePlayers() {
   clearTimeout(startTimer);
   startTimer = null;
   if (document.hidden || appHidden) return;
-  const todo = [...tiles].filter(([, t]) => !t.started && t.rect && !coveredByMenu(t));
+  const live = liveSet();
+  const todo = [...tiles].filter(([ch, t]) => !t.started && t.rect && live.has(ch) && !coveredByMenu(t));
   if (!lowPower) {
     for (const [ch, t] of todo) startPlayer(ch, t);
     return;
@@ -300,10 +373,7 @@ function makeTile(channel) {
   el.dataset.channel = channel;
   const playerEl = document.createElement('div');
   playerEl.className = 'player';
-  const wait = document.createElement('div');
-  wait.className = 'wait';
-  wait.textContent = 'Startet, sobald das Menue zu ist';
-  playerEl.appendChild(wait);
+  playerEl.appendChild(waitEl());
   // Small bar (top right): only visible on hover / focus, so it never covers a starting player.
   const bar = document.createElement('div');
   bar.className = 'bar';
@@ -371,6 +441,7 @@ function render() {
   });
   for (const ch of channels) layoutTile(ch);
   if (cropEdit) renderCropEdit();
+  enforceBudget();
   applyAudio();
   startVisiblePlayers();
 

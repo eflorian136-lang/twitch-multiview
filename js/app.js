@@ -232,14 +232,16 @@ function tunePlayer(ch) {
     if (t.pausedByUs) { p.play(); t.pausedByUs = false; }
     let preset = ch === state.audio ? state.qMain : state.qSide;
     // Fire TV with several streams: "Auto" would pick 1080p60 per stream, more than the stick decodes.
-    const multi = lowPower && visibleCount() > 1;
-    if (multi && preset === 'auto') preset = '720';
+    // Fire TV Stick 4K (1st gen, 1.5 GB RAM): from 4 streams on, 720p for the main stream is too much.
+    const shown = visibleCount();
+    const multi = lowPower && shown > 1;
+    if (multi && preset === 'auto') preset = shown >= 4 ? '480' : '720';
     const crop = cropOf(ch);
     if (crop && preset !== 'auto') {
       // a cam crop is zoomed in: pick a quality that matches the zoomed picture height
-      // (a bit of upscaling is fine; on Fire TV never more than 720p for a cam)
+      // (a bit of upscaling is fine; on Fire TV never more than 480p for a cam)
       const h = (t.playerEl.offsetHeight || 0) * (window.devicePixelRatio || 1);
-      const need = Math.min(lowPower ? 720 : 1080, Math.round(h / 2));
+      const need = Math.min(lowPower ? 480 : 1080, Math.round(h / 2));
       const limit = preset === 'min' ? 0 : Number(preset);
       if (need > limit) preset = String(need);
     }

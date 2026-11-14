@@ -406,3 +406,14 @@ test('Fire TV: players start one after another, several streams never run at 108
   assert.equal((await q()).f1, 'auto');
   assert.deepEqual(errors, []);
 });
+
+test('Fire TV: from 4 streams on the main stream gets at most 480p, cam crops at most 480p', { skip: !chromium && 'playwright missing' }, async () => {
+  const { page, errors } = await open();
+  await page.addInitScript(() => { window.MultiViewApp = { version: () => 7, checkUpdate() {} }; });
+  await page.goto(base + '?c=g1,g2,g3,g4&k=g2.0.0.20');
+  await page.waitForFunction(() => Object.keys(window.__players).length === 4, null, { timeout: 12000 });
+  await page.evaluate(() => Object.values(window.__players).forEach((p) => p.ev.playing && p.ev.playing()));
+  const q = await page.evaluate(() => Object.fromEntries(Object.entries(window.__players).map(([k, v]) => [k, v.quality])));
+  assert.deepEqual(q, { g1: '480p30', g2: '480p30', g3: '160p30', g4: '160p30' });
+  assert.deepEqual(errors, []);
+});

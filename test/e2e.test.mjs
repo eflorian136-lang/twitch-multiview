@@ -447,3 +447,20 @@ test('Fire TV: at most 4 streams play, OK on a waiting cam swaps it in, off-scre
   assert.equal(await page.locator('.stub').count(), 4);
   assert.deepEqual(errors, []);
 });
+
+test('Fire TV: a waiting cam can still be cropped, it plays while the crop editor is open', { skip: !chromium && 'playwright missing' }, async () => {
+  const { page, errors } = await open();
+  await page.addInitScript(() => {
+    window.MultiViewApp = { version: () => 7, checkUpdate() {} };
+    window.__mvStaggerMs = 50;
+  });
+  await page.goto(base + '?c=e1,e2,e3,e4,e5');
+  await page.waitForFunction(() => Object.keys(window.__players).length === 4, null, { timeout: 5000 });
+  await page.keyboard.press('m');
+  await page.click('#list li[data-ch="e5"] [data-act="crop"]');
+  await page.waitForFunction(() => document.querySelector('.tile[data-channel="e5"] .stub'), null, { timeout: 3000 });
+  assert.equal(await page.locator('.stub').count(), 4, 'still only 4 players');
+  await page.click('#cropDone');
+  assert.match(await page.textContent('.tile[data-channel="e5"] .wait'), /hoechstens 4 Streams/);
+  assert.deepEqual(errors, []);
+});

@@ -163,9 +163,12 @@ function unloadPlayer(ch, t) {
   layoutTile(ch);
 }
 
-// Channels allowed to play: main stream first, then the cams in list order, at most MAX_LIVE.
+// Channels allowed to play: main stream first, then a cam being cropped (it must be visible to be
+// edited), then the cams in list order, at most MAX_LIVE.
 function liveSet() {
-  const order = [state.audio, ...state.channels.filter((c) => c !== state.audio)];
+  const first = [state.audio];
+  if (cropEdit && cropEdit.ch !== state.audio) first.push(cropEdit.ch);
+  const order = [...first, ...state.channels.filter((c) => !first.includes(c))];
   return new Set(order.filter((c) => tiles.get(c) && tiles.get(c).rect).slice(0, MAX_LIVE));
 }
 
@@ -205,8 +208,9 @@ function enforceBudget() {
 
 // The Fire TV app calls this when Android runs low on memory: drop everything not on screen now.
 window.lowMemory = () => {
+  const live = liveSet();
   for (const [ch, t] of tiles) {
-    if (!t.rect || (lowPower && !liveSet().has(ch))) unloadPlayer(ch, t);
+    if (!t.rect || !live.has(ch)) unloadPlayer(ch, t);
   }
 };
 
@@ -423,6 +427,8 @@ function render() {
 
   for (const [ch, t] of tiles) {
     if (!channels.includes(ch)) {
+      clearTimeout(t.unloadTimer);
+      t.gen = (t.gen || 0) + 1; // pending timers / events of this player do nothing any more
       t.el.remove();
       tiles.delete(ch);
     }

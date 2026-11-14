@@ -56,6 +56,10 @@ const cropOf = (ch) => (ch !== state.audio ? state.crops[ch] : null);
 // So a player is created only once its tile is on screen and not covered by the menu, and nothing
 // is placed on top of a player until it plays.
 let playerSeq = 0;
+// Fire TV (app or Silk browser): weak CPU, few hardware video decoders. Several 1080p60 streams at
+// once make everything stutter, so there the page saves harder (see tunePlayer / startVisiblePlayers).
+const lowPower = !!window.MultiViewApp || /\bAFT|Silk\/|MultiViewTV/.test(navigator.userAgent);
+const STAGGER_MS = 2500; // Fire TV: start one player at a time, loading several at once freezes the stick
 const isTwitchApi = () => !!(window.Twitch && window.Twitch.Player);
 
 function startPlayer(ch, t) {
@@ -187,10 +191,31 @@ function coveredByMenu(t) {
   return r.left < m.right - 1;
 }
 
+let lastStart = 0;
+let startTimer = null;
 function startVisiblePlayers() {
+  clearTimeout(startTimer);
+  startTimer = null;
   if (document.hidden || appHidden) return;
-  for (const [ch, t] of tiles) if (!t.started && t.rect && !coveredByMenu(t)) startPlayer(ch, t);
+  const todo = [...tiles].filter(([, t]) => !t.started && t.rect && !coveredByMenu(t));
+  if (!lowPower) {
+    for (const [ch, t] of todo) startPlayer(ch, t);
+    return;
+  }
+  if (!todo.length) return;
+  const wait = lastStart + STAGGER_MS - Date.now();
+  if (wait > 0) {
+    startTimer = setTimeout(startVisiblePlayers, wait);
+    return;
+  }
+  // main stream first, then the cams one after another
+  const [ch, t] = todo.find(([c]) => c === state.audio) || todo[0];
+  startPlayer(ch, t);
+  lastStart = Date.now();
+  if (todo.length > 1) startTimer = setTimeout(startVisiblePlayers, STAGGER_MS);
 }
+
+const visibleCount = () => [...tiles.values()].filter((t) => t.rect).length;
 
 // Saves CPU/bandwidth: main stream gets the main quality, side cams the side quality (cropped cams
 // get enough resolution for their zoom), streams that are not visible or a hidden app are paused.
@@ -206,15 +231,19 @@ function tunePlayer(ch) {
     }
     if (t.pausedByUs) { p.play(); t.pausedByUs = false; }
     let preset = ch === state.audio ? state.qMain : state.qSide;
+    // Fire TV with several streams: "Auto" would pick 1080p60 per stream, more than the stick decodes.
+    const multi = lowPower && visibleCount() > 1;
+    if (multi && preset === 'auto') preset = '720';
     const crop = cropOf(ch);
     if (crop && preset !== 'auto') {
       // a cam crop is zoomed in: pick a quality that matches the zoomed picture height
+      // (a bit of upscaling is fine; on Fire TV never more than 720p for a cam)
       const h = (t.playerEl.offsetHeight || 0) * (window.devicePixelRatio || 1);
-      const need = Math.min(1080, Math.round(h / 1.5));
+      const need = Math.min(lowPower ? 720 : 1080, Math.round(h / 2));
       const limit = preset === 'min' ? 0 : Number(preset);
       if (need > limit) preset = String(need);
     }
-    const want = pickQuality(p.getQualities && p.getQualities(), preset);
+    const want = pickQuality(p.getQualities && p.getQualities(), preset, multi ? 30 : 0);
     // only set when our wish changed: setting the quality again makes the player re-buffer
     if (want && t.quality !== want) {
       p.setQuality(want);
@@ -723,7 +752,11 @@ function updateDiag() {
       let paused = '?', muted = '?';
       try { paused = t.player.isPaused(); } catch {}
       try { muted = t.player.getMuted(); } catch {}
-      st = `pausiert=${paused} stumm=${muted} spielt=${!!t.playing}`;
+      st = `pausiert=${paused} stumm=${muted} spielt=${!!t.playing} q=${t.quality || '?'}`;
+      try {
+        const s = t.player.getPlaybackStats();
+        if (s) st += ` ${s.videoResolution || ''} ${s.fps ? Math.round(s.fps) + 'fps' : ''} puffer=${Number(s.bufferSize || 0).toFixed(1)}s ausgelassen=${s.skippedFrames ?? '?'}`;
+      } catch {}
     } else if (t.iframe) st = 'einfacher Player (Twitch-Skript fehlt)';
     lines.push(`${ch}: ${Math.round(r.width)}x${Math.round(r.height)} ${st} | ${(t.log || []).join(', ')}`);
   }

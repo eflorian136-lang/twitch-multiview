@@ -19,7 +19,7 @@ window.Twitch = { Player: function (id, o) {
   const p = { channel: o.channel, muted: o.muted, parent: o.parent, quality: null, paused: false, ev: {},
     setMuted(m) { this.muted = m; }, setVolume() {},
     addEventListener(n, cb) { this.ev[n] = cb; },
-    getQualities() { return [{ name: 'Auto', group: 'auto' }, { name: '1080p60', group: 'chunked' }, { name: '480p', group: '480p30' }, { name: '160p', group: '160p30' }]; },
+    getQualities() { return [{ name: 'Auto', group: 'auto' }, { name: '1080p60', group: 'chunked' }, { name: '720p60', group: '720p60' }, { name: '720p', group: '720p30' }, { name: '480p', group: '480p30' }, { name: '160p', group: '160p30' }]; },
     setQuality(q) { this.quality = q; }, getQuality() { return this.quality; }, isPaused() { return this.paused; },
     pause() { this.paused = true; }, play() { this.paused = false; } };
   window.__players[o.channel] = p;
@@ -385,5 +385,24 @@ test('diagnose box in the menu lists every stream with its player state', { skip
   assert.match(txt, /Geraet: /);
   assert.match(txt, /d1: \d+x\d+ pausiert=false/);
   assert.match(txt, /d2: /);
+  assert.deepEqual(errors, []);
+});
+
+test('Fire TV: players start one after another, several streams never run at 1080p60', { skip: !chromium && 'playwright missing' }, async () => {
+  const { page, errors } = await open();
+  await page.addInitScript(() => { window.MultiViewApp = { version: () => 7, checkUpdate() {} }; });
+  await page.goto(base + '?c=f1,f2,f3');
+  // main stream first, the others are not loaded at the same moment
+  assert.deepEqual(await page.evaluate(() => Object.keys(window.__players)), ['f1']);
+  await page.waitForFunction(() => Object.keys(window.__players).length === 3, null, { timeout: 8000 });
+  const fire = () => page.evaluate(() => Object.values(window.__players).forEach((p) => p.ev.playing && p.ev.playing()));
+  const q = () => page.evaluate(() => Object.fromEntries(Object.entries(window.__players).map(([k, v]) => [k, v.quality])));
+  await fire();
+  assert.deepEqual(await q(), { f1: '720p30', f2: '160p30', f3: '160p30' });
+  // only one stream on screen: Auto is allowed again
+  await page.focus('.tile[data-channel="f1"]');
+  await page.keyboard.press('Enter');
+  await fire();
+  assert.equal((await q()).f1, 'auto');
   assert.deepEqual(errors, []);
 });

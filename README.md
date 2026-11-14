@@ -10,6 +10,7 @@ Mehrere Twitch-Streams gleichzeitig ansehen: einen beliebigen Live-Stream als Ha
 - Cam-Liste mit Nummer, Hauptbild-Markierung, Hoch/Runter und Entfernen (auch per Fernbedienung)
 - Qualitaet einstellbar, getrennt fuer Hauptbild (Auto, 1080p, 720p, 480p, Minimal) und Neben-Cams (Minimal bis Auto), gespeichert pro Geraet
 - Spart Leistung: Neben-Cams standardmaessig stumm in niedrigster Qualitaet, unsichtbare Streams werden pausiert, im Hintergrund (App verlassen) laeuft gar nichts mehr
+- Fire TV: Streams starten nacheinander (Hauptbild zuerst), bei mehreren Streams hoechstens 720p30 statt 1080p60, Cam-Ausschnitte max. 720p
 - Live-Streams finden (nach Twitch-Anmeldung): gefolgte Kanaele, Top DE, Top weltweit, Suche
 - "Hauptbild" setzt einen Stream gross und mit Ton, "Als Cam dazu" fuegt ihn klein dazu
 - Layouts: Raster, Spotlight, Bild in Bild, Nur einer

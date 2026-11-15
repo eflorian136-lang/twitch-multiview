@@ -56,6 +56,10 @@ button:focus, input:focus { border-color: var(--focus); }
 /* Fire TV app: page is laid out at 1920 px, so enlarge the controls */
 html.tv .menu, html.tv .open-menu, html.tv .welcome, html.tv .crop-bar, html.tv .tile .bar, html.tv .tile .wait { zoom: 2; }
 html.tv .tile:focus::after { border-width: 8px; }
+/* zoom 2 doubles the bar width too: keep it inside the screen so "Fertig" stays reachable */
+html.tv .crop-bar { width: min(940px, calc((100vw - 24px) / 2)); }
+/* Fire TV: no sliding menu, every animation frame over running videos costs the stick time */
+html.tv .menu { transition: none; }
 
 .welcome { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; color: var(--muted); padding: 24px; }
 

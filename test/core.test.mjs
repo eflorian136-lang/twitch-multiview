@@ -66,6 +66,17 @@ test('pickQuality honours presets with fallback', () => {
   assert.equal(pickQuality([], '720'), null);
 });
 
+test('pickQuality prefers 30 fps over 60 fps at the same resolution when asked', () => {
+  const qs = [{ name: '1080p60 (Quelle)', group: 'chunked' }, { name: '720p60', group: '720p60' }, { name: '720p', group: '720p30' },
+    { name: '480p', group: '480p30' }, { name: '160p', group: '160p30' }];
+  assert.equal(pickQuality(qs, '720'), '720p60');
+  assert.equal(pickQuality(qs, '720', 30), '720p30');
+  assert.equal(pickQuality(qs, '1080', 30), 'chunked'); // no 1080p30: resolution still wins
+  assert.equal(pickQuality([{ group: '720p60' }, { group: '720p30' }], 'min', 30), '720p30');
+  assert.equal(pickQuality([{ group: '720p30' }, { group: '720p60' }], '720', 30), '720p30');
+  assert.equal(pickQuality([{ group: '720p60' }], '720', 30), '720p60');
+});
+
 test('quality settings are sanitized', () => {
   assert.deepEqual([sanitizeState({ qMain: '1080', qSide: '360' }).qMain, sanitizeState({ qSide: '360' }).qSide], ['1080', '360']);
   assert.deepEqual([sanitizeState({ qMain: 'x' }).qMain, sanitizeState({ qSide: 99 }).qSide], ['auto', 'min']);

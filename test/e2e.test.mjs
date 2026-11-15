@@ -19,7 +19,7 @@ window.Twitch = { Player: function (id, o) {
   const p = { channel: o.channel, muted: o.muted, parent: o.parent, quality: null, paused: false, ev: {},
     setMuted(m) { this.muted = m; }, setVolume() {},
     addEventListener(n, cb) { this.ev[n] = cb; },
-    getQualities() { return [{ name: 'Auto', group: 'auto' }, { name: '1080p60', group: 'chunked' }, { name: '480p', group: '480p30' }, { name: '160p', group: '160p30' }]; },
+    getQualities() { return [{ name: 'Auto', group: 'auto' }, { name: '1080p60', group: 'chunked' }, { name: '720p60', group: '720p60' }, { name: '720p', group: '720p30' }, { name: '480p', group: '480p30' }, { name: '160p', group: '160p30' }]; },
     setQuality(q) { this.quality = q; }, getQuality() { return this.quality; }, isPaused() { return this.paused; },
     pause() { this.paused = true; }, play() { this.paused = false; } };
   window.__players[o.channel] = p;
@@ -385,5 +385,115 @@ test('diagnose box in the menu lists every stream with its player state', { skip
   assert.match(txt, /Geraet: /);
   assert.match(txt, /d1: \d+x\d+ pausiert=false/);
   assert.match(txt, /d2: /);
+  assert.deepEqual(errors, []);
+});
+
+test('Fire TV: players start one after another, several streams never run at 1080p60', { skip: !chromium && 'playwright missing' }, async () => {
+  const { page, errors } = await open();
+  await page.addInitScript(() => { window.MultiViewApp = { version: () => 7, checkUpdate() {} }; });
+  await page.goto(base + '?c=f1,f2,f3');
+  // main stream first, the others are not loaded at the same moment
+  assert.deepEqual(await page.evaluate(() => Object.keys(window.__players)), ['f1']);
+  await page.waitForFunction(() => Object.keys(window.__players).length === 3, null, { timeout: 8000 });
+  const fire = () => page.evaluate(() => Object.values(window.__players).forEach((p) => p.ev.playing && p.ev.playing()));
+  const q = () => page.evaluate(() => Object.fromEntries(Object.entries(window.__players).map(([k, v]) => [k, v.quality])));
+  await fire();
+  assert.deepEqual(await q(), { f1: '720p30', f2: '160p30', f3: '160p30' });
+  // only one stream on screen: Auto is allowed again
+  await page.focus('.tile[data-channel="f1"]');
+  await page.keyboard.press('Enter');
+  await fire();
+  assert.equal((await q()).f1, 'auto');
+  assert.deepEqual(errors, []);
+});
+
+test('Fire TV: from 4 streams on the main stream gets at most 480p, cam crops at most 480p', { skip: !chromium && 'playwright missing' }, async () => {
+  const { page, errors } = await open();
+  await page.addInitScript(() => { window.MultiViewApp = { version: () => 7, checkUpdate() {} }; });
+  await page.goto(base + '?c=g1,g2,g3,g4&k=g2.0.0.20');
+  await page.waitForFunction(() => Object.keys(window.__players).length === 4, null, { timeout: 12000 });
+  await page.evaluate(() => Object.values(window.__players).forEach((p) => p.ev.playing && p.ev.playing()));
+  const q = await page.evaluate(() => Object.fromEntries(Object.entries(window.__players).map(([k, v]) => [k, v.quality])));
+  assert.deepEqual(q, { g1: '480p30', g2: '480p30', g3: '160p30', g4: '160p30' });
+  assert.deepEqual(errors, []);
+});
+
+test('Fire TV: at most 4 streams play, OK on a waiting cam swaps it in, off-screen players are unloaded', { skip: !chromium && 'playwright missing' }, async () => {
+  const { page, errors } = await open();
+  await page.addInitScript(() => {
+    window.MultiViewApp = { version: () => 7, checkUpdate() {} };
+    window.__mvStaggerMs = 50;
+    window.__mvUnloadMs = 300;
+  });
+  await page.goto(base + '?c=h1,h2,h3,h4,h5,h6');
+  await page.waitForFunction(() => Object.keys(window.__players).length === 4, null, { timeout: 5000 });
+  await page.waitForTimeout(300);
+  assert.deepEqual(await page.evaluate(() => Object.keys(window.__players)), ['h1', 'h2', 'h3', 'h4']);
+  assert.match(await page.textContent('.tile[data-channel="h6"] .wait'), /hoechstens 4 Streams/);
+  // OK on h6: it becomes the main stream, the last cam in the list (h4) makes room
+  await page.focus('.tile[data-channel="h6"]');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => window.__players.h6, null, { timeout: 3000 });
+  assert.equal(await page.locator('.tile[data-channel="h4"] iframe, .tile[data-channel="h4"] .stub').count(), 0);
+  assert.match(await page.textContent('.tile[data-channel="h4"] .wait'), /hoechstens 4 Streams/);
+  // only h6 on screen: the others are unloaded after a while
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => document.querySelectorAll('.stub').length === 1, null, { timeout: 3000 });
+  // back to the grid: they come back one after another
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => document.querySelectorAll('.stub').length === 4, null, { timeout: 3000 });
+  // low-memory signal from the app drops what is not on screen
+  await page.evaluate(() => window.lowMemory());
+  assert.equal(await page.locator('.stub').count(), 4);
+  assert.deepEqual(errors, []);
+});
+
+test('Fire TV: a waiting cam can still be cropped, it plays while the crop editor is open', { skip: !chromium && 'playwright missing' }, async () => {
+  const { page, errors } = await open();
+  await page.addInitScript(() => {
+    window.MultiViewApp = { version: () => 7, checkUpdate() {} };
+    window.__mvStaggerMs = 50;
+  });
+  await page.goto(base + '?c=e1,e2,e3,e4,e5');
+  await page.waitForFunction(() => Object.keys(window.__players).length === 4, null, { timeout: 5000 });
+  await page.keyboard.press('m');
+  await page.click('#list li[data-ch="e5"] [data-act="crop"]');
+  await page.waitForFunction(() => document.querySelector('.tile[data-channel="e5"] .stub'), null, { timeout: 3000 });
+  assert.equal(await page.locator('.stub').count(), 4, 'still only 4 players');
+  await page.click('#cropDone');
+  assert.match(await page.textContent('.tile[data-channel="e5"] .wait'), /hoechstens 4 Streams/);
+  assert.deepEqual(errors, []);
+});
+
+test('Fire TV app: OK on a stream that never started taps into the player, a playing one switches as before', { skip: !chromium && 'playwright missing' }, async () => {
+  const { page, errors } = await open();
+  await page.addInitScript(() => {
+    window.__taps = [];
+    window.MultiViewApp = { version: () => 7, checkUpdate() {}, tap: (x, y) => window.__taps.push([x, y]) };
+    window.__mvStaggerMs = 50;
+  });
+  await page.goto(base + '?c=t1,t2');
+  await page.waitForFunction(() => Object.keys(window.__players).length === 2, null, { timeout: 3000 });
+  await page.focus('.tile[data-channel="t2"]');
+  await page.keyboard.press('Enter');
+  const taps = await page.evaluate(() => window.__taps);
+  assert.equal(taps.length, 1);
+  assert.ok(taps[0][0] > 0.5 && taps[0][0] < 1, 'tap in the right half (tile t2): ' + taps[0]);
+  assert.match(page.url(), /\?c=t1,t2$/, 'no switch of the main stream');
+  await page.waitForFunction(() => document.activeElement.dataset.channel === 't2', null, { timeout: 2000 });
+  // still not playing (e.g. offline): the second OK switches as before, no second tap
+  await page.keyboard.press('Enter');
+  assert.match(page.url(), /a=t2/);
+  assert.equal(await page.evaluate(() => window.__taps.length), 1);
+  await page.focus('.tile[data-channel="t1"]');
+  await page.keyboard.press('Enter'); // t1 main again (t1 never played either: first OK on it taps)
+  await page.keyboard.press('Enter');
+  assert.doesNotMatch(page.url(), /a=t2/);
+  await page.focus('.tile[data-channel="t2"]');
+  // once it plays, OK works as before
+  await page.evaluate(() => window.__players.t2.ev.playing());
+  await page.keyboard.press('Enter');
+  assert.match(page.url(), /a=t2/);
+  assert.equal(await page.evaluate(() => window.__taps.length), 2);
   assert.deepEqual(errors, []);
 });

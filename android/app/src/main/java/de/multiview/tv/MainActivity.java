@@ -85,12 +85,14 @@ public class MainActivity extends Activity {
         setContentView(web);
         hideSystemUi();
 
+        // The bridge must exist before the page loads: the page checks window.MultiViewApp at its
+        // very first line (TV layout, Fire TV savings, tap into the player).
+        updater = new Updater(this);
+        web.addJavascriptInterface(new Bridge(), "MultiViewApp");
+
         if (savedInstanceState != null) web.restoreState(savedInstanceState);
         else web.loadUrl(BuildConfig.START_URL);
         web.requestFocus();
-
-        updater = new Updater(this);
-        web.addJavascriptInterface(new Bridge(), "MultiViewApp");
     }
 
     static String desktopUserAgent(String ua) {

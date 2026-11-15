@@ -1004,7 +1004,7 @@ document.addEventListener('keydown', (e) => {
       const t = tiles.get(ch);
       // never played: Twitch sometimes waits for a real click in its player (play button, content
       // warning). The Fire TV app can tap there for us.
-      if (t && t.started && !t.playing && tapInto(t)) return;
+      if (t && t.started && !t.playing && (e.repeat || tapInto(t))) return; // held OK: tap only once
       if (t && t.resumedAt && Date.now() - t.resumedAt < 300) return; // this OK just started the paused stream
       if (state.audio === ch) toggleSingle(ch);
       else selectAudio(ch);

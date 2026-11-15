@@ -349,7 +349,10 @@ test('crop editor works with the remote: arrows move, OK = size, Back = done', {
   await page.keyboard.press('ArrowRight');
   await page.keyboard.press('ArrowUp');
   assert.match(page.url(), /k=r2\.2\.68\.30/);
+  // keep focus on the frame (not the button bar), so OK switches the mode
+  await page.evaluate(() => document.activeElement.blur());
   await page.keyboard.press('Enter'); // size mode
+  await page.waitForFunction(() => document.getElementById('cropMode').textContent === 'Groesse');
   await page.keyboard.press('ArrowUp');
   assert.match(page.url(), /k=r2\.1\.67\.32/);
   assert.equal(await page.evaluate(() => window.handleBack()), 'handled');

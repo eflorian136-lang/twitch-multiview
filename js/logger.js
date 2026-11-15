@@ -154,7 +154,7 @@ export function createLogger({ storage, send, now = () => Date.now(), header = (
 
 // ---------- im Browser: alles anschliessen ----------
 function install() {
-  const session = Math.random().toString(36).slice(2, 8);
+  const session = Array.from(crypto.getRandomValues(new Uint8Array(4)), (b) => b.toString(16).padStart(2, '0')).join('');
   const call = (obj, name) => {
     try { return obj && typeof obj[name] === 'function' ? obj[name]() : ''; } catch { return ''; }
   };

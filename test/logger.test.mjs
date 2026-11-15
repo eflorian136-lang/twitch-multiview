@@ -36,7 +36,10 @@ test('logger queues, dedupes, sends and keeps unsent lines', async () => {
   const storage = memStore();
   const log = createLogger({
     storage, header: () => '## dev',
-    send: async (b) => { if (fail) throw new Error('offline'); sent.push(b); },
+    send: async (b) => {
+      if (fail) throw new Error('offline');
+      sent.push(b);
+    },
     setTimer: (fn) => { timers.push(fn); return timers.length; },
   });
   log.add('info', 'hallo');

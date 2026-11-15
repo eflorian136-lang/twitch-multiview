@@ -1056,6 +1056,21 @@ const showPointerUi = () => {
   mouseTimer = setTimeout(() => document.body.classList.remove('mouse-active'), 4000);
 };
 document.addEventListener('mousemove', showPointerUi);
+
+// Frame and name bar on the tiles disappear 5 s after the last key press / mouse move / touch.
+const IDLE_MS = window.__mvIdleMs ?? 5000;
+let idleTimer;
+let lastActive = 0;
+const wakeUi = () => {
+  const now = Date.now();
+  if (now - lastActive < 250 && !document.body.classList.contains('ui-idle')) return; // mousemove fires often
+  lastActive = now;
+  document.body.classList.remove('ui-idle');
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => document.body.classList.add('ui-idle'), IDLE_MS);
+};
+for (const ev of ['keydown', 'mousemove', 'pointerdown', 'touchstart']) document.addEventListener(ev, wakeUi, { capture: true, passive: true });
+wakeUi();
 document.addEventListener('touchstart', showPointerUi, { passive: true });
 // Mouse over a player does not reach this page; entering a tile still shows the menu button.
 stage.addEventListener('mouseover', showPointerUi);

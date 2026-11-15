@@ -45,7 +45,9 @@ public final class CrashLog {
         Thread.setDefaultUncaughtExceptionHandler((thread, ex) -> {
             try {
                 StringWriter sw = new StringWriter();
-                ex.printStackTrace(new PrintWriter(sw));
+                try (PrintWriter pw = new PrintWriter(sw)) {
+                    ex.printStackTrace(pw);
+                }
                 write("App-Absturz im Thread " + thread.getName() + ":\n" + sw);
             } catch (Throwable ignored) {
             }
@@ -101,6 +103,7 @@ public final class CrashLog {
         }
         try {
             ActivityManager am = (ActivityManager) ctx.getSystemService(Context.ACTIVITY_SERVICE);
+            if (am == null) return sb.toString();
             ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
             am.getMemoryInfo(mi);
             sb.append(", RAM ").append(mi.totalMem / (1024 * 1024)).append(" MB (frei ")

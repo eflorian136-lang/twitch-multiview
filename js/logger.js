@@ -180,7 +180,7 @@ function install() {
     const orig = console[level];
     console[level] = (...a) => {
       try { log.add(level === 'log' ? 'info' : level, ...a); } catch {}
-      return orig.apply(console, a);
+      orig.apply(console, a);
     };
   }
   window.addEventListener('error', (e) => {
@@ -206,12 +206,11 @@ function install() {
   for (const fn of ['pushState', 'replaceState']) {
     const orig = history[fn];
     history[fn] = function (...a) {
-      const r = orig.apply(this, a);
+      orig.apply(this, a);
       if (location.search !== lastQuery) {
         lastQuery = location.search;
         log.add('state', decodeURIComponent(location.search));
       }
-      return r;
     };
   }
   window.addEventListener('unhandledrejection', (e) => log.add('error', 'Unbehandelt:', e.reason));

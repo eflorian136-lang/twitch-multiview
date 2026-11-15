@@ -464,3 +464,27 @@ test('Fire TV: a waiting cam can still be cropped, it plays while the crop edito
   assert.match(await page.textContent('.tile[data-channel="e5"] .wait'), /hoechstens 4 Streams/);
   assert.deepEqual(errors, []);
 });
+
+test('Fire TV app: OK on a stream that never started taps into the player, a playing one switches as before', { skip: !chromium && 'playwright missing' }, async () => {
+  const { page, errors } = await open();
+  await page.addInitScript(() => {
+    window.__taps = [];
+    window.MultiViewApp = { version: () => 7, checkUpdate() {}, tap: (x, y) => window.__taps.push([x, y]) };
+    window.__mvStaggerMs = 50;
+  });
+  await page.goto(base + '?c=t1,t2');
+  await page.waitForFunction(() => Object.keys(window.__players).length === 2, null, { timeout: 3000 });
+  await page.focus('.tile[data-channel="t2"]');
+  await page.keyboard.press('Enter');
+  const taps = await page.evaluate(() => window.__taps);
+  assert.equal(taps.length, 1);
+  assert.ok(taps[0][0] > 0.5 && taps[0][0] < 1, 'tap in the right half (tile t2): ' + taps[0]);
+  assert.match(page.url(), /\?c=t1,t2$/, 'no switch of the main stream');
+  await page.waitForFunction(() => document.activeElement.dataset.channel === 't2', null, { timeout: 2000 });
+  // once it plays, OK works as before
+  await page.evaluate(() => window.__players.t2.ev.playing());
+  await page.keyboard.press('Enter');
+  assert.match(page.url(), /a=t2/);
+  assert.equal(await page.evaluate(() => window.__taps.length), 1);
+  assert.deepEqual(errors, []);
+});

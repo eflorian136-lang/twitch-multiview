@@ -1002,12 +1002,29 @@ document.addEventListener('keydown', (e) => {
     if (ch) {
       e.preventDefault();
       const t = tiles.get(ch);
+      // never played: Twitch sometimes waits for a real click in its player (play button, content
+      // warning). The Fire TV app can tap there for us.
+      if (t && t.started && !t.playing && tapInto(t)) return;
       if (t && t.resumedAt && Date.now() - t.resumedAt < 300) return; // this OK just started the paused stream
       if (state.audio === ch) toggleSingle(ch);
       else selectAudio(ch);
     }
   }
 });
+
+// Fire TV app (new versions): a real touch in the middle of the tile, then the remote focus comes back.
+function tapInto(t) {
+  const app = window.MultiViewApp;
+  if (!app || typeof app.tap !== 'function') return false;
+  const r = t.el.getBoundingClientRect();
+  try {
+    app.tap((r.left + r.width / 2) / innerWidth, (r.top + r.height / 2) / innerHeight);
+  } catch {
+    return false;
+  }
+  setTimeout(() => t.el.focus(), 500);
+  return true;
+}
 
 // Clicking into a Twitch player moves focus into its iframe: mark that tile as the current one.
 window.addEventListener('blur', () => {

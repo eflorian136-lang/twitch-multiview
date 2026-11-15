@@ -62,7 +62,7 @@ export function parseChannelList(text) {
   return { channels, invalid };
 }
 
-// Player qualities (objects {name, group} or strings) -> [{ id, res }] with a real resolution.
+// Player qualities (objects {name, group} or strings) -> [{ id, res, fps }] with a real resolution.
 function realQualities(qualities) {
   if (!Array.isArray(qualities)) return [];
   const out = [];
@@ -72,28 +72,41 @@ function realQualities(qualities) {
     // "chunked" is the source quality; its resolution is in the name ("1080p60 (source)")
     const label = id === 'chunked' && q && typeof q === 'object' ? String(q.name || '') : String(id);
     const res = Number.parseInt(label, 10);
-    if (Number.isFinite(res)) out.push({ id, res });
+    const fm = label.match(/^\d+p(\d+)/);
+    const fps = fm ? Number(fm[1]) : 30;
+    if (Number.isFinite(res)) out.push({ id, res, fps });
   }
   return out;
 }
 
+// Same resolution: prefer a frame rate within maxFps (60 fps costs about twice the decoding work).
+function better(a, b, maxFps) {
+  if (!b) return true;
+  if (a.res !== b.res) return false;
+  if (!maxFps) return false;
+  const aOk = a.fps <= maxFps, bOk = b.fps <= maxFps;
+  if (aOk !== bOk) return aOk;
+  return aOk ? a.fps > b.fps : a.fps < b.fps;
+}
+
 // Lowest real quality id (e.g. "160p30"), or null.
-export function lowestQuality(qualities) {
+export function lowestQuality(qualities, maxFps = 0) {
   let best = null;
-  for (const q of realQualities(qualities)) if (!best || q.res < best.res) best = q;
+  for (const q of realQualities(qualities)) if (!best || q.res < best.res || better(q, best, maxFps)) best = q;
   return best ? best.id : null;
 }
 
 // Quality id to set for a preset: 'auto', 'min' or max. resolution ('1080', '720', ...).
 // Picks the highest available quality not above the limit, else the lowest. null = nothing to set yet.
-export function pickQuality(qualities, preset) {
+// maxFps (optional): among equal resolutions take one with at most this frame rate if there is one.
+export function pickQuality(qualities, preset, maxFps = 0) {
   if (preset === 'auto') return 'auto';
-  if (preset === 'min') return lowestQuality(qualities);
+  if (preset === 'min') return lowestQuality(qualities, maxFps);
   const limit = Number.parseInt(preset, 10);
   const list = realQualities(qualities);
   let best = null;
-  for (const q of list) if (q.res <= limit && (!best || q.res > best.res)) best = q;
-  return best ? best.id : lowestQuality(qualities);
+  for (const q of list) if (q.res <= limit && (!best || q.res > best.res || better(q, best, maxFps))) best = q;
+  return best ? best.id : lowestQuality(qualities, maxFps);
 }
 
 export function defaultState() {

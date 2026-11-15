@@ -4,7 +4,10 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.os.SystemClock;
+import android.view.InputDevice;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
@@ -105,6 +108,29 @@ public class MainActivity extends Activity {
             runOnUiThread(() -> updater.check(true));
         }
 
+        /**
+         * A real tap at (fx, fy) = fraction of the page width / height. The Twitch player in its
+         * iframe sometimes only starts after a click (play button, content warning); a remote cannot
+         * click into an iframe, a touch event from the app can.
+         */
+        @android.webkit.JavascriptInterface
+        public void tap(final float fx, final float fy) {
+            runOnUiThread(() -> {
+                if (fx < 0 || fx > 1 || fy < 0 || fy > 1) return;
+                float x = fx * web.getWidth(), y = fy * web.getHeight();
+                long t = SystemClock.uptimeMillis();
+                MotionEvent down = MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, x, y, 0);
+                MotionEvent up = MotionEvent.obtain(t, t + 60, MotionEvent.ACTION_UP, x, y, 0);
+                down.setSource(InputDevice.SOURCE_TOUCHSCREEN);
+                up.setSource(InputDevice.SOURCE_TOUCHSCREEN);
+                web.dispatchTouchEvent(down);
+                web.dispatchTouchEvent(up);
+                down.recycle();
+                up.recycle();
+                web.requestFocus();
+            });
+        }
+
         @android.webkit.JavascriptInterface
         public int version() {
             return BuildConfig.VERSION_CODE;
@@ -196,6 +222,16 @@ public class MainActivity extends Activity {
         if (now - lastUpdateCheck > 6 * 3600 * 1000L) {
             lastUpdateCheck = now;
             updater.check(false);
+        }
+    }
+
+    // Fire TV Stick 4K has 1.5 GB RAM: when Android asks to free memory, the page drops every player
+    // that is not on screen, before Android kills the WebView renderer (black screen / app restart).
+    @Override
+    public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        if (web != null && level >= TRIM_MEMORY_RUNNING_LOW && level != TRIM_MEMORY_UI_HIDDEN) {
+            web.evaluateJavascript("window.lowMemory && window.lowMemory()", null);
         }
     }
 

@@ -25,6 +25,7 @@ public class MainActivity extends Activity {
     private Updater updater;
     private long lastUpdateCheck = 0;
     private boolean paused = false;
+    private CrashLog crashLog;
 
     private static final String ERROR_PAGE =
         "<html><body style='background:#0e0e10;color:#efeff1;font:28px sans-serif;display:flex;"
@@ -35,6 +36,8 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        crashLog = new CrashLog(this);
+        crashLog.install();
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         web = new WebView(this);
@@ -65,7 +68,12 @@ public class MainActivity extends Activity {
         cookies.setAcceptCookie(true);
         if (android.os.Build.VERSION.SDK_INT >= 21) cookies.setAcceptThirdPartyCookies(web, true);
 
-        web.setWebChromeClient(new WebChromeClient());
+        web.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onConsoleMessage(android.webkit.ConsoleMessage m) {
+                return crashLog.console(web, m);
+            }
+        });
         web.setWebViewClient(new WebViewClient() {
             @Override
             public void onReceivedError(WebView view, WebResourceRequest req, WebResourceError err) {
@@ -76,6 +84,13 @@ public class MainActivity extends Activity {
             @Override
             public void onReceivedError(WebView view, int code, String desc, String url) {
                 if (url != null && url.equals(view.getUrl())) showError();
+            }
+
+            // Renderer weg (meist Speicher voll): fuer das App-Log merken, Verhalten bleibt gleich
+            @Override
+            public boolean onRenderProcessGone(WebView view, android.webkit.RenderProcessGoneDetail d) {
+                crashLog.rendererGone(d != null && d.didCrash());
+                return false;
             }
         });
 
@@ -88,6 +103,7 @@ public class MainActivity extends Activity {
 
         updater = new Updater(this);
         web.addJavascriptInterface(new Bridge(), "MultiViewApp");
+        web.addJavascriptInterface(crashLog.new Bridge(), "MultiViewLog");
     }
 
     static String desktopUserAgent(String ua) {

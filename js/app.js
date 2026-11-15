@@ -70,6 +70,7 @@ const isTwitchApi = () => !!(window.Twitch && window.Twitch.Player);
 
 function startPlayer(ch, t) {
   t.started = true;
+  t.tapped = false;
   const gen = t.gen = (t.gen || 0) + 1; // timers / events of an unloaded player must not touch the tile
   const current = () => tiles.get(ch) === t && t.gen === gen;
   t.playerEl.replaceChildren();
@@ -156,7 +157,7 @@ function unloadPlayer(ch, t) {
   t.gen = (t.gen || 0) + 1;
   Object.assign(t, {
     started: false, player: null, iframe: null, playing: false, quality: undefined, pausedByUs: false,
-    cropReady: false, audioOn: undefined, autoMuted: false, volumeSet: false, log: [],
+    cropReady: false, audioOn: undefined, autoMuted: false, volumeSet: false, log: [], tapped: false,
   });
   t.el.classList.remove('stalled', 'needs-sound');
   t.playerEl.replaceChildren(waitEl());
@@ -1004,7 +1005,12 @@ document.addEventListener('keydown', (e) => {
       const t = tiles.get(ch);
       // never played: Twitch sometimes waits for a real click in its player (play button, content
       // warning). The Fire TV app can tap there for us.
-      if (t && t.started && !t.playing && (e.repeat || tapInto(t))) return; // held OK: tap only once
+      // Only the first OK taps: a stream that is offline never plays, the next OK must still switch.
+      if (t && t.started && !t.playing && !t.tapped && !e.repeat && tapInto(t)) {
+        t.tapped = true;
+        return;
+      }
+      if (t && e.repeat && t.tapped && !t.playing) return; // held OK after the tap
       if (t && t.resumedAt && Date.now() - t.resumedAt < 300) return; // this OK just started the paused stream
       if (state.audio === ch) toggleSingle(ch);
       else selectAudio(ch);

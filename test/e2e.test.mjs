@@ -481,10 +481,19 @@ test('Fire TV app: OK on a stream that never started taps into the player, a pla
   assert.ok(taps[0][0] > 0.5 && taps[0][0] < 1, 'tap in the right half (tile t2): ' + taps[0]);
   assert.match(page.url(), /\?c=t1,t2$/, 'no switch of the main stream');
   await page.waitForFunction(() => document.activeElement.dataset.channel === 't2', null, { timeout: 2000 });
+  // still not playing (e.g. offline): the second OK switches as before, no second tap
+  await page.keyboard.press('Enter');
+  assert.match(page.url(), /a=t2/);
+  assert.equal(await page.evaluate(() => window.__taps.length), 1);
+  await page.focus('.tile[data-channel="t1"]');
+  await page.keyboard.press('Enter'); // t1 main again (t1 never played either: first OK on it taps)
+  await page.keyboard.press('Enter');
+  assert.doesNotMatch(page.url(), /a=t2/);
+  await page.focus('.tile[data-channel="t2"]');
   // once it plays, OK works as before
   await page.evaluate(() => window.__players.t2.ev.playing());
   await page.keyboard.press('Enter');
   assert.match(page.url(), /a=t2/);
-  assert.equal(await page.evaluate(() => window.__taps.length), 1);
+  assert.equal(await page.evaluate(() => window.__taps.length), 2);
   assert.deepEqual(errors, []);
 });

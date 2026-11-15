@@ -497,3 +497,19 @@ test('Fire TV app: OK on a stream that never started taps into the player, a pla
   assert.equal(await page.evaluate(() => window.__taps.length), 2);
   assert.deepEqual(errors, []);
 });
+
+test('frame and name bar on the tiles disappear after a few seconds, a key brings them back', { skip: !chromium && 'playwright missing' }, async () => {
+  const { page, errors } = await open();
+  await page.addInitScript(() => { window.__mvIdleMs = 300; });
+  await page.goto(base + '?c=u1,u2');
+  await page.focus('.tile[data-channel="u1"]');
+  await page.keyboard.press('ArrowRight');
+  assert.ok(await page.isVisible('.tile[data-channel="u2"] .bar'), 'bar visible right after a key');
+  await page.waitForTimeout(600);
+  assert.ok(!(await page.isVisible('.tile[data-channel="u2"] .bar')), 'bar hidden when idle');
+  const border = await page.evaluate(() => getComputedStyle(document.querySelector('.tile[data-channel="u2"]'), '::after').display);
+  assert.equal(border, 'none');
+  await page.keyboard.press('ArrowLeft');
+  assert.ok(await page.isVisible('.tile[data-channel="u1"] .bar'));
+  assert.deepEqual(errors, []);
+});

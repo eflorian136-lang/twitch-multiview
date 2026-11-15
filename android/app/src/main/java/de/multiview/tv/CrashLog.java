@@ -83,8 +83,7 @@ public final class CrashLog {
         } catch (Throwable e) {
             return "";
         } finally {
-            //noinspection ResultOfMethodCallIgnored
-            f.delete();
+            if (!f.delete()) f.deleteOnExit();
         }
     }
 
@@ -131,6 +130,12 @@ public final class CrashLog {
         web.evaluateJavascript("window.mvLog && window.mvLog(" + JSONObject.quote(type) + ","
             + JSONObject.quote(text) + ")", null);
         return false;
+    }
+
+    /** Jede Taste der Fernbedienung, so wie die App sie bekommt (zum Vergleich mit KEY im Seiten-Log). */
+    void key(WebView web, int code) {
+        String name = android.view.KeyEvent.keyCodeToString(code).replace("KEYCODE_", "");
+        web.evaluateJavascript("window.mvLog && window.mvLog('remote'," + JSONObject.quote(name) + ")", null);
     }
 
     private static String shortSource(String src) {

@@ -1129,14 +1129,15 @@ window.mvDiag = () => {
     const t = l.lastSent ? new Date(l.lastSent).toLocaleTimeString().slice(0, 5) : 'noch nicht';
     $('logInfo').textContent = `Zuletzt gesendet: ${t}, wartend: ${l.pending} Zeilen`;
   };
-  $('sendLog').addEventListener('click', async () => {
+  $('sendLog').addEventListener('click', () => {
     const l = window.mvLogger;
     if (!l) return;
     l.add('diag', 'Von Hand gesendet\n' + window.mvDiag());
     $('logInfo').textContent = 'Sende...';
-    const ok = await l.flush();
-    if (ok) info();
-    else $('logInfo').textContent = 'Senden fehlgeschlagen (kein Internet?), wird spaeter wiederholt';
+    l.flush().then((ok) => {
+      if (ok) info();
+      else $('logInfo').textContent = 'Senden fehlgeschlagen (kein Internet?), wird spaeter wiederholt';
+    });
   });
   setInterval(() => menuOpen() && info(), 5000);
   // Fire-TV-App geht in den Hintergrund: vorher noch senden

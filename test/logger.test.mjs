@@ -98,6 +98,17 @@ test('page sends JS errors and a stuck stream automatically', { skip: !chromium 
   assert.match(all, /ERROR .*Testfehler 42/);
   assert.match(all, /STREAM alpha spielt nach 12s nicht. Ereignisse: .*ready/);
   assert.match(all, /PLAYER alpha erstellt/);
+  // Tasten und Zustand (Streamer) werden mitgeschrieben
+  posts.length = 0;
+  await page.keyboard.press('ArrowRight');
+  await page.evaluate(() => history.replaceState(null, '', '?c=alpha,beta&a=beta'));
+  await page.clock.runFor(70000);
+  for (let i = 0; i < 20 && !posts.join('\n').includes('STATE'); i++) {
+    await page.clock.runFor(2000);
+    await page.waitForTimeout(20);
+  }
+  assert.match(posts.join('\n'), /KEY ArrowRight ->/);
+  assert.match(posts.join('\n'), /STATE \?c=alpha,beta&a=beta/);
   // Knopf im Menue sendet Diagnose
   posts.length = 0;
   await page.evaluate(() => document.getElementById('sendLog').click());

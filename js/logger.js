@@ -28,8 +28,8 @@ const bytes = (s) => (typeof TextEncoder !== 'undefined' ? new TextEncoder().enc
 export function chunk(header, lines, max = MAX_MSG) {
   const out = [];
   let cur = header;
-  for (let line of lines) {
-    if (bytes(header + '\n' + line) > max) line = line.slice(0, Math.max(50, max - bytes(header) - 20)) + ' [gekuerzt]';
+  for (const raw of lines) {
+    const line = bytes(header + '\n' + raw) > max ? raw.slice(0, Math.max(50, max - bytes(header) - 20)) + ' [gekuerzt]' : raw;
     if (cur !== header && bytes(cur + '\n' + line) > max) {
       out.push(cur);
       cur = header;
@@ -191,12 +191,35 @@ function install() {
       log.add('error', 'Laden fehlgeschlagen:', e.target.src || e.target.href || e.target.tagName);
     }
   }, true);
+  // Bedienung: jede Taste und jeder Klick mit dem, was gerade ausgewaehlt ist (Kachel = Streamer)
+  const describe = (el) => {
+    if (!el || el === document.body) return 'nichts ausgewaehlt';
+    const tile = el.closest && el.closest('[data-channel]');
+    if (tile) return 'Kachel ' + tile.dataset.channel;
+    const txt = (el.textContent || el.value || '').trim().slice(0, 30);
+    return `${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''}${txt ? ' "' + txt + '"' : ''}`;
+  };
+  document.addEventListener('keydown', (e) => log.add('key', e.key, '->', describe(document.activeElement)), true);
+  document.addEventListener('click', (e) => log.add('click', describe(e.target)), true);
+  // Zustand (Streamer-Liste, Hauptbild/Ton, Layout) steht im Link: jede Aenderung mitschreiben
+  let lastQuery = location.search;
+  for (const fn of ['pushState', 'replaceState']) {
+    const orig = history[fn];
+    history[fn] = function (...a) {
+      const r = orig.apply(this, a);
+      if (location.search !== lastQuery) {
+        lastQuery = location.search;
+        log.add('state', decodeURIComponent(location.search));
+      }
+      return r;
+    };
+  }
   window.addEventListener('unhandledrejection', (e) => log.add('error', 'Unbehandelt:', e.reason));
   window.addEventListener('online', () => log.add('info', 'Internet wieder da'));
   window.addEventListener('offline', () => log.add('warn', 'Internet weg'));
   // beim Verlassen schnell noch senden
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) log.flush();
+    if (document.hidden) log.flush().catch(() => {});
   });
 
   // Absturz der Fire-TV-App beim letzten Mal (Java schreibt ihn in eine Datei)

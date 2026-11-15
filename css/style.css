@@ -19,9 +19,8 @@ input { flex: 1; min-width: 0; }
 /* Big, obvious focus ring for TV remotes */
 .nav:focus { outline: 4px solid var(--focus); outline-offset: -4px; }
 .tile:focus { outline: none; }
-.tile:focus::after { content: ''; position: absolute; inset: 0; z-index: 5; border: 3px solid rgba(255,255,255,.5); pointer-events: none; }
-/* After 5 s without a key / mouse move: no frame and no name bar over the streams */
-body.ui-idle .tile:focus::after { display: none; }
+/* No frame around a stream: the selected one shows its name bar for 5 s after a key press */
+/* After 5 s without a key / mouse move: no name bar over the streams */
 body.ui-idle .tile .bar { display: none !important; }
 button:focus, input:focus { border-color: var(--focus); }
 
@@ -42,7 +41,7 @@ button:focus, input:focus { border-color: var(--focus); }
 .tile.stalled .bar .label::after { content: ' - startet nicht: OK / Klick'; color: #ff8080; font-weight: 400; }
 .tile.needs-sound .bar .label::after { content: ' - stumm: Taste / Klick fuer Ton'; color: var(--focus); font-weight: 400; }
 .tile.stalled .bar .label, .tile.needs-sound .bar .label { max-width: none; }
-.tile.pip-small { z-index: 4; box-shadow: 0 0 0 2px rgba(0,0,0,.8); border-radius: 6px; }
+.tile.pip-small { z-index: 4; }
 .tile.cropped .player { right: auto; bottom: auto; }
 
 /* Cam crop editor: the edited cam fills the screen, a frame marks the region to keep */
@@ -58,7 +57,6 @@ button:focus, input:focus { border-color: var(--focus); }
 
 /* Fire TV app: page is laid out at 1920 px, so enlarge the controls */
 html.tv .menu, html.tv .open-menu, html.tv .welcome, html.tv .crop-bar, html.tv .tile .bar, html.tv .tile .wait { zoom: 2; }
-html.tv .tile:focus::after { border-width: 4px; }
 /* zoom 2 doubles the bar width too: keep it inside the screen so "Fertig" stays reachable */
 html.tv .crop-bar { width: min(940px, calc((100vw - 24px) / 2)); }
 /* Fire TV: no sliding menu, every animation frame over running videos costs the stick time */

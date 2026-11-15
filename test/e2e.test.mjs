@@ -507,8 +507,9 @@ test('frame and name bar on the tiles disappear after a few seconds, a key bring
   assert.ok(await page.isVisible('.tile[data-channel="u2"] .bar'), 'bar visible right after a key');
   await page.waitForTimeout(600);
   assert.ok(!(await page.isVisible('.tile[data-channel="u2"] .bar')), 'bar hidden when idle');
-  const border = await page.evaluate(() => getComputedStyle(document.querySelector('.tile[data-channel="u2"]'), '::after').display);
-  assert.equal(border, 'none');
+  // never a frame around the selected stream
+  const frame = await page.evaluate(() => getComputedStyle(document.querySelector('.tile[data-channel="u2"]'), '::after').content);
+  assert.ok(frame === 'none' || frame === 'normal', 'no frame: ' + frame);
   await page.keyboard.press('ArrowLeft');
   assert.ok(await page.isVisible('.tile[data-channel="u1"] .bar'));
   assert.deepEqual(errors, []);

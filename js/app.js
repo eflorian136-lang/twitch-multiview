@@ -1252,6 +1252,38 @@ if (window.MultiViewApp) {
   $('appUpdate').addEventListener('click', () => window.MultiViewApp.checkUpdate());
 }
 
+// ---------- App-Log (js/logger.js) ----------
+window.mvDiag = () => {
+  updateDiag();
+  return $('diag').textContent;
+};
+{
+  const info = () => {
+    const l = window.mvLogger;
+    if (!l) return;
+    const t = l.lastSent ? new Date(l.lastSent).toLocaleTimeString().slice(0, 5) : 'noch nicht';
+    $('logInfo').textContent = `Zuletzt gesendet: ${t}, wartend: ${l.pending} Zeilen`;
+  };
+  $('sendLog').addEventListener('click', () => {
+    const l = window.mvLogger;
+    if (!l) return;
+    l.add('diag', 'Von Hand gesendet\n' + window.mvDiag());
+    $('logInfo').textContent = 'Sende...';
+    l.flush().then((ok) => {
+      if (ok) info();
+      else $('logInfo').textContent = 'Senden fehlgeschlagen (kein Internet?), wird spaeter wiederholt';
+    });
+  });
+  setInterval(() => menuOpen() && info(), 5000);
+  // Fire-TV-App geht in den Hintergrund: vorher noch senden
+  const setHidden = window.setAppHidden;
+  window.setAppHidden = (hidden) => {
+    window.mvLog?.('info', hidden ? 'App im Hintergrund' : 'App wieder im Vordergrund');
+    if (hidden) window.mvLogger?.flush();
+    setHidden(hidden);
+  };
+}
+
 // ---------- start ----------
 history.replaceState(null, '', location.pathname + toQuery(state));
 render();

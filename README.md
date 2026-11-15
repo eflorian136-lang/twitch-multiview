@@ -52,6 +52,12 @@ Twitch gibt Listen von Live-Streams nur mit einer (kostenlosen) Client-ID heraus
 
 Anmeldung am Fernseher: "Mit Twitch anmelden" zeigt einen Code, den man am Handy unter twitch.tv/activate eingibt.
 
+## App-Log (automatische Fehlerberichte)
+
+Website und Fire-TV-App schicken ihr Log automatisch an ntfy.sh (Thema `mv-applog-yk23bxfv09r4mzq1`, siehe `js/logger.js`): Konsole, JS-Fehler, jede Taste und jeder Klick (mit ausgewaehltem Streamer), jede Aenderung von Streamer-Liste/Hauptbild/Layout, Ereignisse jedes Twitch-Players, Streams die nach 12 s nicht spielen (mit Diagnose), alle 5 Minuten die Diagnose-Werte, in der App zusaetzlich Abstuerze, Renderer-Abbrueche, jede Fernbedienungstaste wie Android sie meldet, Meldungen aus den Player-iframes und das Geraetemodell. Zugangsdaten werden vorher entfernt. Im Menue unter "Diagnose" gibt es "Log jetzt senden".
+
+Der Workflow "App-Log abholen" holt die Meldungen alle 30 Minuten (oder per Hand gestartet) ab und legt sie im Branch `app-logs` ab: `logs/fehler.log` (nur Fehler) und `logs/JJJJ-MM-TT.log` (alles). Hinweis: Thema und Branch sind oeffentlich lesbar, deshalb enthaelt das Log keine Anmeldedaten.
+
 ## Entwicklung
 
 ```

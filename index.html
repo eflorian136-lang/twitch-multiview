@@ -12,6 +12,7 @@
     document.querySelector('meta[name=viewport]').setAttribute('content', 'width=1920');
   }
 </script>
+<script type="module" src="js/logger.js"></script>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -125,7 +126,11 @@
     <p class="hint">Tipp: Am Handy einrichten, Link am Fire TV im Silk-Browser oeffnen und als Lesezeichen speichern.</p>
     <h2>Diagnose</h2>
     <pre id="diag" class="diag"></pre>
-    <p class="hint">Startet ein Stream nicht, bitte diesen Kasten abfotografieren und schicken.</p>
+    <div class="row">
+      <button id="sendLog" class="nav">Log jetzt senden</button>
+      <span id="logInfo" class="hint"></span>
+    </div>
+    <p class="hint">Fehler, Abstuerze und diese Werte werden automatisch gemeldet (ohne Anmeldedaten). Abfotografieren ist nicht mehr noetig.</p>
     <div id="appBox" class="row" hidden style="margin-top:12px">
       <button id="appUpdate" class="nav">App-Update suchen</button>
       <span id="appVersion" class="hint"></span>

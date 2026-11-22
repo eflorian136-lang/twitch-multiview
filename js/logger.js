@@ -11,7 +11,8 @@ const DAY_KEY = 'multiview-log-day';
 const MAX_QUEUE = 400; // Zeilen; aelteste fliegen raus
 const MAX_LINE = 1200;
 const DAILY_LIMIT = 180; // ntfy.sh erlaubt ohne Konto ca. 250 Nachrichten pro Tag und Anschluss
-const FLUSH_MS = 60000;
+const ERROR_RESERVE = 30; // die letzten Nachrichten des Tages nur fuer Fehler, sonst fehlen sie abends
+const FLUSH_MS = 5 * 60000; // normale Zeilen gesammelt alle 5 Minuten (Tagesbudget reicht so fuer ~15 h)
 const ERROR_FLUSH_MS = 4000;
 
 // Zugangsdaten aus Text entfernen (Twitch-Tokens in URLs oder JSON).
@@ -24,20 +25,28 @@ export function scrub(text) {
 // Bytes eines Strings in UTF-8
 const bytes = (s) => (typeof TextEncoder !== 'undefined' ? new TextEncoder().encode(s).length : s.length);
 
-// Zeilen in Nachrichten <= max Bytes packen, jede mit Kopfzeile. Zu lange Zeilen werden gekuerzt.
-export function chunk(header, lines, max = MAX_MSG) {
+// Eintraege in Nachrichten <= max Bytes packen, jede mit Kopfzeile. Zu lange werden gekuerzt.
+// Ein Eintrag kann selbst mehrere Zeilen haben (Stacktrace, Diagnose): n zaehlt Eintraege.
+function pack(header, entries, max = MAX_MSG) {
   const out = [];
   let cur = header;
-  for (const raw of lines) {
-    const line = bytes(header + '\n' + raw) > max ? raw.slice(0, Math.max(50, max - bytes(header) - 20)) + ' [gekuerzt]' : raw;
-    if (cur !== header && bytes(cur + '\n' + line) > max) {
-      out.push(cur);
+  let n = 0;
+  for (const raw of entries) {
+    const line = bytes(header + '\n' + raw) > max ? raw.slice(0, Math.max(50, Math.floor((max - bytes(header) - 20) / 3))) + ' [gekuerzt]' : raw;
+    if (n && bytes(cur + '\n' + line) > max) {
+      out.push({ text: cur, n });
       cur = header;
+      n = 0;
     }
     cur += '\n' + line;
+    n++;
   }
-  if (cur !== header) out.push(cur);
+  if (n) out.push({ text: cur, n });
   return out;
+}
+
+export function chunk(header, lines, max = MAX_MSG) {
+  return pack(header, lines, max).map((p) => p.text);
 }
 
 const fmt = (v) => {
@@ -58,6 +67,7 @@ export function createLogger({ storage, send, now = () => Date.now(), header = (
   let lastKey = '';
   let repeat = 1;
   let urgentPending = false;
+  let shifted = 0; // Eintraege, die waehrend des Sendens vorne aus der Warteschlange fielen
   const save = () => {
     try { storage?.setItem(STORE_KEY, JSON.stringify(queue)); } catch {}
   };
@@ -96,6 +106,7 @@ export function createLogger({ storage, send, now = () => Date.now(), header = (
     }
     if (queue.length > MAX_QUEUE) {
       dropped += queue.length - MAX_QUEUE;
+      if (sending) shifted += queue.length - MAX_QUEUE;
       queue = queue.slice(-MAX_QUEUE);
     }
     save();
@@ -110,18 +121,23 @@ export function createLogger({ storage, send, now = () => Date.now(), header = (
   async function flush() {
     if (sending || !queue.length) return false;
     const d = daily();
-    if (d.n >= DAILY_LIMIT) return false;
+    const urgent = urgentPending;
+    const budget = DAILY_LIMIT - d.n - (urgent ? 0 : ERROR_RESERVE);
+    if (budget <= 0) return false;
     sending = true;
+    shifted = 0;
     urgentPending = false;
-    const lines = queue.slice();
-    if (dropped) lines.unshift(`(${dropped} aeltere Zeilen verworfen)`);
-    const parts = chunk(header(), lines).slice(0, Math.min(3, DAILY_LIMIT - d.n));
-    let sentLines = 0;
+    const entries = queue.slice();
+    const noted = dropped;
+    const note = noted ? `(${noted} aeltere Zeilen verworfen)` : '';
+    if (note) entries.unshift(note);
+    const parts = pack(header(), entries).slice(0, Math.min(3, budget));
+    let sent = 0; // Eintraege (nicht Textzeilen) erfolgreich gesendet
     try {
       for (const p of parts) {
-        await send(p);
+        await send(p.text);
         d.n++;
-        sentLines += p.split('\n').length - 1;
+        sent += p.n;
       }
     } catch {
       // offline o.ae.: spaeter nochmal
@@ -129,18 +145,19 @@ export function createLogger({ storage, send, now = () => Date.now(), header = (
       sending = false;
       try { storage?.setItem(DAY_KEY, JSON.stringify(d)); } catch {}
     }
-    if (sentLines) {
-      if (dropped) {
-        dropped = 0;
-        sentLines--;
+    if (sent) {
+      if (note) {
+        dropped -= noted;
+        sent--;
       }
-      queue = queue.slice(sentLines);
+      // waehrend des Sendens neu hinzugekommene Eintraege bleiben in der Warteschlange
+      queue = queue.slice(Math.max(0, sent - shifted));
       lastKey = '';
       save();
       lastSent = now();
-    }
+    } else if (urgent) urgentPending = true;
     if (queue.length) schedule(urgentPending ? ERROR_FLUSH_MS : FLUSH_MS);
-    return sentLines > 0;
+    return sent > 0;
   }
 
   return {

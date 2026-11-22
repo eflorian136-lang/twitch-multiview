@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: write
+  issues: write   # neue Fehler landen im Issue "App-Fehler" (Label app-fehler), das Claude abarbeitet
 
 concurrency:
   group: app-logs
@@ -47,7 +48,7 @@ jobs:
             curl -fsS --max-time 60 "https://ntfy.sh/$TOPIC/json?poll=1&since=12h" > "$RUNNER_TEMP/new.jsonl"
           }
           python3 - "$RUNNER_TEMP/new.jsonl" <<'PY'
-          import json, sys, time, os
+          import json, sys, time, os, re
           msgs = []
           for line in open(sys.argv[1], encoding='utf-8'):
               try:
@@ -68,10 +69,19 @@ jobs:
               with open(f"logs/{time.strftime('%Y-%m-%d', t)}.log", 'a', encoding='utf-8') as f:
                   f.write(f"\n=== {stamp} ===\n{text}\n")
               lines = text.split('\n')
-              err = [l for l in lines[1:] if any(b in l for b in bad)]
+              # ein Eintrag beginnt mit "HH:MM:SS.mmm TYP"; Folgezeilen (Stacktrace, Diagnose) gehoeren dazu
+              err, keep = [], False
+              for l in lines[1:]:
+                  if re.match(r'^\d\d:\d\d:\d\d\.\d{3} [A-Z]+ ', l):
+                      keep = any(b in l for b in bad)
+                  if keep:
+                      err.append(l)
               if err:
+                  block = f"\n=== {stamp} {lines[0]}\n" + '\n'.join(err) + '\n'
                   with open('logs/fehler.log', 'a', encoding='utf-8') as f:
-                      f.write(f"\n=== {stamp} {lines[0]}\n" + '\n'.join(err) + '\n')
+                      f.write(block)
+                  with open(os.environ['RUNNER_TEMP'] + '/new-errors.txt', 'a', encoding='utf-8') as f:
+                      f.write(block)
           with open('logs/.last-id', 'w') as f:
               f.write(msgs[-1]['id'])
           print(f'{len(msgs)} neue Meldungen')
@@ -82,3 +92,18 @@ jobs:
           if git diff --cached --quiet; then exit 0; fi
           git commit -qm "App-Log $(date -u '+%Y-%m-%d %H:%M')"
           git push origin app-logs
+      - name: Neue Fehler ins Issue "App-Fehler"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          f="$RUNNER_TEMP/new-errors.txt"
+          [ -s "$f" ] || { echo "Keine neuen Fehler"; exit 0; }
+          gh label create app-fehler --color B60205 --description "Automatisch gemeldete App-Fehler" --force >/dev/null
+          { echo '```'; head -c 60000 "$f"; echo; echo '```'; } > "$RUNNER_TEMP/body.md"
+          n=$(gh issue list --label app-fehler --state open --limit 1 --json number --jq '.[0].number // empty')
+          if [ -n "$n" ]; then
+            gh issue comment "$n" --body-file "$RUNNER_TEMP/body.md"
+          else
+            gh issue create --title "App-Fehler" --label app-fehler --body-file "$RUNNER_TEMP/body.md"
+          fi

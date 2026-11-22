@@ -58,6 +58,8 @@ Website und Fire-TV-App schicken ihr Log automatisch an ntfy.sh (Thema `mv-applo
 
 Der Workflow "App-Log abholen" holt die Meldungen alle 30 Minuten (oder per Hand gestartet) ab und legt sie im Branch `app-logs` ab: `logs/fehler.log` (nur Fehler) und `logs/JJJJ-MM-TT.log` (alles). Hinweis: Thema und Branch sind oeffentlich lesbar, deshalb enthaelt das Log keine Anmeldedaten.
 
+Neue Fehler (ERROR, CRASH, STREAM, WARN) schreibt der Workflow zusaetzlich in das offene GitHub-Issue "App-Fehler" (Label `app-fehler`). Eine geplante Claude-Aufgabe startet den Workflow regelmaessig selbst, liest das Issue, behebt die Ursachen und oeffnet dafuer einen Pull Request ("Fixes #..."). Nach dem Merge schliesst sich das Issue, neue Fehler eroeffnen ein neues.
+
 ## Entwicklung
 
 ```

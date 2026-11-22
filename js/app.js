@@ -1294,7 +1294,10 @@ window.mvDiag = () => {
   const setHidden = window.setAppHidden;
   window.setAppHidden = (hidden) => {
     window.mvLog?.('info', hidden ? 'App im Hintergrund' : 'App wieder im Vordergrund');
-    if (hidden) window.mvLogger?.flush();
+    if (hidden) {
+      window.mvLogger?.save?.();
+      window.mvLogger?.flush();
+    }
     setHidden(hidden);
   };
 }

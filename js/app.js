@@ -102,7 +102,8 @@ function startPlayer(ch, t) {
         t.audioOn = undefined; // re-apply mute/volume now that the player listens
         applyAudioTile(ch, t);
         tunePlayer(ch);
-        kickPlayer(ch, t, 0);
+        // the player can take long to get ready (slow Fire TV): try again counted from here
+        for (const [i, ms] of [0, 3000, 6000, 12000, 20000].entries()) setTimeout(() => current() && kickPlayer(ch, t, i), ms);
       });
       on(P.PLAYING || 'playing', () => {
         if (!current()) return;
@@ -137,7 +138,7 @@ function startPlayer(ch, t) {
         if (!t.playing) t.el.classList.add('stalled');
       }, 8000);
       // Twitch does not always autoplay (browser rules, its own checks): start it ourselves.
-      for (const [i, ms] of [1500, 4000, 8000, 15000].entries()) setTimeout(() => current() && kickPlayer(ch, t, i + 1), ms);
+      for (const ms of [1500, 4000, 8000, 15000]) setTimeout(() => current() && kickPlayer(ch, t, 1), ms); // escalation starts at READY
       return;
     }
   }
@@ -222,15 +223,20 @@ const playerPaused = (t) => {
 
 // Starts a stream that stays paused. If the browser blocks sound without a click, the main stream
 // starts muted; the next key press / click anywhere turns the sound back on.
+// "not playing" also covers a player that loaded but never started (isPaused() is false then).
+const notPlaying = (t) => !t.playing || playerPaused(t);
+
 function kickPlayer(ch, t, attempt) {
-  if (tiles.get(ch) !== t || !t.player || !shouldRun(t) || !playerPaused(t)) return;
+  if (tiles.get(ch) !== t || !t.player || !shouldRun(t) || !notPlaying(t)) return;
   try {
     if (attempt >= 2 && ch === state.audio && !t.autoMuted) {
       t.player.setMuted(true);
       t.autoMuted = true;
       t.el.classList.add('needs-sound');
     }
+    if (attempt >= 4 && typeof t.player.setChannel === 'function') t.player.setChannel(ch); // reload the stream
     t.player.play();
+    (t.log || []).push(`kick${attempt}`);
   } catch {}
 }
 
@@ -244,9 +250,9 @@ function onUserGesture() {
         t.autoMuted = false;
         t.el.classList.remove('needs-sound');
       }
-      if (shouldRun(t) && playerPaused(t)) {
+      if (shouldRun(t) && notPlaying(t)) {
+        if (playerPaused(t)) t.resumedAt = Date.now(); // this key press resumed it: OK does nothing else
         t.player.play();
-        t.resumedAt = Date.now();
       }
     } catch {}
   }
@@ -836,6 +842,10 @@ function updateDiag() {
       try {
         const s = t.player.getPlaybackStats();
         if (s) st += ` ${s.videoResolution || ''} ${s.fps ? Math.round(s.fps) + 'fps' : ''} puffer=${Number(s.bufferSize || 0).toFixed(1)}s ausgelassen=${s.skippedFrames ?? '?'}`;
+      } catch {}
+      try {
+        const ps = JSON.stringify(t.player.getPlayerState());
+        if (ps) st += ' ' + ps.slice(0, 160);
       } catch {}
     } else if (t.iframe) st = 'einfacher Player (Twitch-Skript fehlt)';
     lines.push(`${ch}: ${Math.round(r.width)}x${Math.round(r.height)} ${st} | ${(t.log || []).join(', ')}`);

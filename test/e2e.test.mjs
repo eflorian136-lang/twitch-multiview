@@ -367,6 +367,7 @@ test('paused streams are started by the page; main falls back to muted, a key pr
     for (const p of Object.values(window.__players)) {
       p.paused = true;
       p.play = function () { if (!this.muted && this.channel === 'k1') return; this.paused = false; };
+      p.ev.ready && p.ev.ready();
     }
   });
   await page.waitForFunction(() => !window.__players.k2.paused, null, { timeout: 3000 });
@@ -515,5 +516,23 @@ test('frame and name bar on the tiles disappear after a few seconds, a key bring
   assert.ok(frame === 'none' || frame === 'normal', 'no frame: ' + frame);
   await page.keyboard.press('ArrowLeft');
   assert.ok(await page.isVisible('.tile[data-channel="u1"] .bar'));
+  assert.deepEqual(errors, []);
+});
+
+test('a player that loaded but never plays (isPaused false) is started anyway', { skip: !chromium && 'playwright missing' }, async () => {
+  const { page, errors } = await open('?c=n1');
+  await page.evaluate(() => {
+    const p = window.__players.n1;
+    p.paused = false; // Twitch reports "not paused" while it never started
+    p.plays = 0;
+    p.play = function () { this.plays++; };
+    p.ev.ready && p.ev.ready();
+  });
+  await page.waitForFunction(() => window.__players.n1.plays > 0, null, { timeout: 2000 });
+  // once it plays, no more kicks
+  await page.evaluate(() => window.__players.n1.ev.playing && window.__players.n1.ev.playing());
+  const n = await page.evaluate(() => window.__players.n1.plays);
+  await page.waitForTimeout(3500);
+  assert.equal(await page.evaluate(() => window.__players.n1.plays), n);
   assert.deepEqual(errors, []);
 });

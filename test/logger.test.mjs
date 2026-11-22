@@ -105,7 +105,7 @@ test('page sends JS errors and a stuck stream automatically', { skip: !chromium 
   posts.length = 0;
   await page.keyboard.press('ArrowRight');
   await page.evaluate(() => history.replaceState(null, '', '?c=alpha,beta&a=beta'));
-  await page.clock.runFor(70000);
+  await page.clock.runFor(310000);
   for (let i = 0; i < 20 && !posts.join('\n').includes('STATE'); i++) {
     await page.clock.runFor(2000);
     await page.waitForTimeout(20);
@@ -119,4 +119,47 @@ test('page sends JS errors and a stuck stream automatically', { skip: !chromium 
   await page.waitForFunction(() => /Zuletzt gesendet/.test(document.getElementById('logInfo').textContent));
   assert.match(posts.join('\n'), /DIAG Von Hand gesendet\nGeraet:/);
   await page.close();
+});
+
+test('multi-line entries (stack, diag) do not make later lines vanish', async () => {
+  const sent = [];
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const log = createLogger({
+    storage: memStore(), header: () => '## dev', setTimer: () => 0,
+    send: async (b) => { await gate; sent.push(b); },
+  });
+  log.add('diag', '\nzeile1\nzeile2\nzeile3\nzeile4');
+  log.add('info', 'erste');
+  const p = log.flush();
+  // waehrend gesendet wird, kommt Neues dazu: darf nicht verloren gehen
+  log.add('info', 'neu1');
+  log.add('info', 'neu2');
+  release();
+  assert.equal(await p, true);
+  assert.equal(log.pending, 2, 'neu1 und neu2 warten noch');
+  assert.equal(await log.flush(), true);
+  assert.match(sent[1], /INFO neu1\n.* INFO neu2/);
+});
+
+test('more parts than one flush sends: the rest is sent next time, nothing skipped', async () => {
+  const sent = [];
+  const log = createLogger({ storage: memStore(), header: () => '## dev', setTimer: () => 0, send: async (b) => sent.push(b) });
+  for (let i = 0; i < 40; i++) log.add('diag', `nr${i}\n` + 'x'.repeat(400) + '\n' + 'y'.repeat(400));
+  while (log.pending) assert.equal(await log.flush(), true);
+  const all = sent.join('\n');
+  for (let i = 0; i < 40; i++) assert.ok(all.includes(`DIAG nr${i}\n`), 'nr' + i + ' fehlt');
+});
+
+test('errors still get through when the daily budget is nearly used up', async () => {
+  const sent = [];
+  const storage = memStore();
+  const day = new Date().toISOString().slice(0, 10);
+  storage.setItem('multiview-log-day', JSON.stringify({ day, n: 170 }));
+  const log = createLogger({ storage, header: () => '## dev', setTimer: () => 0, send: async (b) => sent.push(b) });
+  log.add('key', 'ArrowLeft');
+  assert.equal(await log.flush(), false, 'normale Zeilen warten, Rest ist fuer Fehler');
+  log.add('error', 'kaputt');
+  assert.equal(await log.flush(), true);
+  assert.match(sent[0], /KEY ArrowLeft[\s\S]*ERROR kaputt/);
 });

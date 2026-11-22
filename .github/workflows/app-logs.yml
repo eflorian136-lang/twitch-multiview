@@ -47,7 +47,7 @@ jobs:
             curl -fsS --max-time 60 "https://ntfy.sh/$TOPIC/json?poll=1&since=12h" > "$RUNNER_TEMP/new.jsonl"
           }
           python3 - "$RUNNER_TEMP/new.jsonl" <<'PY'
-          import json, sys, time, os
+          import json, sys, time, os, re
           msgs = []
           for line in open(sys.argv[1], encoding='utf-8'):
               try:
@@ -68,7 +68,13 @@ jobs:
               with open(f"logs/{time.strftime('%Y-%m-%d', t)}.log", 'a', encoding='utf-8') as f:
                   f.write(f"\n=== {stamp} ===\n{text}\n")
               lines = text.split('\n')
-              err = [l for l in lines[1:] if any(b in l for b in bad)]
+              # ein Eintrag beginnt mit "HH:MM:SS.mmm TYP"; Folgezeilen (Stacktrace, Diagnose) gehoeren dazu
+              err, keep = [], False
+              for l in lines[1:]:
+                  if re.match(r'^\d\d:\d\d:\d\d\.\d{3} [A-Z]+ ', l):
+                      keep = any(b in l for b in bad)
+                  if keep:
+                      err.append(l)
               if err:
                   with open('logs/fehler.log', 'a', encoding='utf-8') as f:
                       f.write(f"\n=== {stamp} {lines[0]}\n" + '\n'.join(err) + '\n')

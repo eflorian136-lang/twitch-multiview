@@ -29,7 +29,7 @@ import java.util.Locale;
  */
 public final class CrashLog {
     private static final String FILE = "crash.txt";
-    private static final int MAX_FRAME_MSGS_PER_MIN = 120;
+    private static final int MAX_FRAME_MSGS_PER_MIN = 30;
 
     private final Context ctx;
     private long frameWindow = 0;
@@ -121,14 +121,17 @@ public final class CrashLog {
     boolean console(WebView web, ConsoleMessage m) {
         String src = m.sourceId() == null ? "" : m.sourceId();
         if (src.startsWith(BuildConfig.START_URL) || src.isEmpty()) return false;
+        // Nur Warnungen und Fehler: das Plaudern des Twitch-Players kostet den Stick sonst
+        // jedes Mal einen Sprung in die Seite.
+        ConsoleMessage.MessageLevel lvl = m.messageLevel();
+        if (lvl != ConsoleMessage.MessageLevel.ERROR && lvl != ConsoleMessage.MessageLevel.WARNING) return false;
         long now = System.currentTimeMillis();
         if (now - frameWindow > 60000) {
             frameWindow = now;
             frameCount = 0;
         }
         if (++frameCount > MAX_FRAME_MSGS_PER_MIN) return false;
-        String type = m.messageLevel() == ConsoleMessage.MessageLevel.ERROR ? "error"
-            : m.messageLevel() == ConsoleMessage.MessageLevel.WARNING ? "warn" : "frame";
+        String type = lvl == ConsoleMessage.MessageLevel.ERROR ? "error" : "warn";
         String text = "[" + shortSource(src) + ":" + m.lineNumber() + "] " + m.message();
         web.evaluateJavascript("window.mvLog && window.mvLog(" + JSONObject.quote(type) + ","
             + JSONObject.quote(text) + ")", null);

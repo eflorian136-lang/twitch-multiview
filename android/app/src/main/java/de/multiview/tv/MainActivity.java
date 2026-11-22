@@ -186,7 +186,7 @@ public class MainActivity extends Activity {
         if (e.getAction() != KeyEvent.ACTION_DOWN) {
             return (code == KeyEvent.KEYCODE_MENU || code == KeyEvent.KEYCODE_BACK) || super.dispatchKeyEvent(e);
         }
-        crashLog.key(web, code);
+        if (e.getRepeatCount() == 0) crashLog.key(web, code); // gehaltene Taste nur einmal ins Log
         if (showingError && (code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER)) {
             reload();
             return true;

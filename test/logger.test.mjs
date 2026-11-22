@@ -163,3 +163,23 @@ test('errors still get through when the daily budget is nearly used up', async (
   assert.equal(await log.flush(), true);
   assert.match(sent[0], /KEY ArrowLeft[\s\S]*ERROR kaputt/);
 });
+
+test('normal lines are saved together later, errors at once (less flash writes on the Fire TV)', () => {
+  let writes = 0;
+  const m = new Map();
+  const storage = { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => { writes++; m.set(k, String(v)); } };
+  const timers = [];
+  const log = createLogger({ storage, header: () => '## dev', send: async () => {}, setTimer: (fn, ms) => { timers.push({ fn, ms }); return timers.length; } });
+  for (let i = 0; i < 50; i++) log.add('key', 'ArrowRight', i);
+  assert.equal(writes, 0, 'keine 50 Schreibvorgaenge');
+  const saver = timers.find((t) => t.ms === 3000);
+  assert.ok(saver, 'ein gesammeltes Speichern ist geplant');
+  saver.fn();
+  assert.equal(writes, 1);
+  assert.equal(JSON.parse(m.get('multiview-log-queue')).length, 50);
+  log.add('error', 'kaputt');
+  assert.equal(writes, 2, 'Fehler sofort gespeichert');
+  log.add('info', 'x');
+  log.save();
+  assert.equal(JSON.parse(m.get('multiview-log-queue')).length, 52);
+});

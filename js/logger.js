@@ -14,6 +14,9 @@ const DAILY_LIMIT = 180; // ntfy.sh erlaubt ohne Konto ca. 250 Nachrichten pro T
 const ERROR_RESERVE = 30; // die letzten Nachrichten des Tages nur fuer Fehler, sonst fehlen sie abends
 const FLUSH_MS = 5 * 60000; // normale Zeilen gesammelt alle 5 Minuten (Tagesbudget reicht so fuer ~15 h)
 const ERROR_FLUSH_MS = 4000;
+// localStorage schreibt synchron auf den Flash-Speicher des Sticks: normale Zeilen (Tasten,
+// Player-Ereignisse) nur gesammelt speichern, Fehler sofort (falls die App gleich abstuerzt).
+const SAVE_MS = 3000;
 
 // Zugangsdaten aus Text entfernen (Twitch-Tokens in URLs oder JSON).
 export function scrub(text) {
@@ -23,7 +26,8 @@ export function scrub(text) {
 }
 
 // Bytes eines Strings in UTF-8
-const bytes = (s) => (typeof TextEncoder !== 'undefined' ? new TextEncoder().encode(s).length : s.length);
+const enc = typeof TextEncoder !== 'undefined' ? new TextEncoder() : null;
+const bytes = (s) => (enc ? enc.encode(s).length : s.length);
 
 // Eintraege in Nachrichten <= max Bytes packen, jede mit Kopfzeile. Zu lange werden gekuerzt.
 // Ein Eintrag kann selbst mehrere Zeilen haben (Stacktrace, Diagnose): n zaehlt Eintraege.
@@ -68,8 +72,13 @@ export function createLogger({ storage, send, now = () => Date.now(), header = (
   let repeat = 1;
   let urgentPending = false;
   let shifted = 0; // Eintraege, die waehrend des Sendens vorne aus der Warteschlange fielen
+  let saveTimer = null;
   const save = () => {
+    saveTimer = null;
     try { storage?.setItem(STORE_KEY, JSON.stringify(queue)); } catch {}
+  };
+  const saveSoon = () => {
+    if (!saveTimer) saveTimer = setTimer(save, SAVE_MS) || true;
   };
   const daily = () => {
     const day = new Date(now()).toISOString().slice(0, 10);
@@ -109,8 +118,9 @@ export function createLogger({ storage, send, now = () => Date.now(), header = (
       if (sending) shifted += queue.length - MAX_QUEUE;
       queue = queue.slice(-MAX_QUEUE);
     }
-    save();
     const urgent = type === 'error' || type === 'crash' || type === 'stream';
+    if (urgent) save();
+    else saveSoon();
     if (urgent) {
       lastError = line;
       urgentPending = true;
@@ -163,6 +173,7 @@ export function createLogger({ storage, send, now = () => Date.now(), header = (
   return {
     add,
     flush,
+    save,
     get pending() { return queue.length; },
     get lastSent() { return lastSent; },
     get lastError() { return lastError; },
@@ -216,7 +227,8 @@ function install() {
     const txt = (el.textContent || el.value || '').trim().slice(0, 30);
     return `${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''}${txt ? ' "' + txt + '"' : ''}`;
   };
-  document.addEventListener('keydown', (e) => log.add('key', e.key, '->', describe(document.activeElement)), true);
+  // gehaltene Taste: nur der erste Druck (sonst 20 Zeilen pro Sekunde)
+  document.addEventListener('keydown', (e) => { if (!e.repeat) log.add('key', e.key, '->', describe(document.activeElement)); }, true);
   document.addEventListener('click', (e) => log.add('click', describe(e.target)), true);
   // Zustand (Streamer-Liste, Hauptbild/Ton, Layout) steht im Link: jede Aenderung mitschreiben
   let lastQuery = location.search;
@@ -235,8 +247,11 @@ function install() {
   window.addEventListener('offline', () => log.add('warn', 'Internet weg'));
   // beim Verlassen schnell noch senden
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) log.flush().catch(() => {});
+    if (!document.hidden) return;
+    log.save();
+    log.flush().catch(() => {});
   });
+  window.addEventListener('pagehide', () => log.save());
 
   // Absturz der Fire-TV-App beim letzten Mal (Java schreibt ihn in eine Datei)
   const crash = call(window.MultiViewLog, 'takeCrash');
